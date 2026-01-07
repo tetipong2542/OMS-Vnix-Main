@@ -879,39 +879,57 @@ def create_app():
     app = Flask(__name__)
     app.secret_key = os.environ.get("SECRET_KEY", "vnix-secret")
 
-    # ตรวจสอบว่าอยู่ใน Railway และมี Volume หรือไม่
-    volume_path = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")
-    if volume_path:
-        # Production (Railway with Volume) - ข้อมูลจะไม่หายหลัง deploy
-        db_path = os.path.join(volume_path, "data.db")
+    # =========[ Database Configuration ]=========
+    # Support both Turso (Production) and Local SQLite (Development)
+    turso_url = os.environ.get("TURSO_DATABASE_URL")
+    turso_token = os.environ.get("TURSO_AUTH_TOKEN")
+
+    if turso_url and turso_token:
+        # Production: Use Turso (libSQL) - Serverless Database
+        print("[INFO] Using Turso (libSQL) database")
+        # Format: libsql://database-name.turso.io?authToken=token
+        db_uri = f"{turso_url}?authToken={turso_token}"
+
+        app.config["SQLALCHEMY_DATABASE_URI"] = db_uri
+        app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+        # All 3 databases (data, price, supplier) are in the same Turso database
+        # So we use the same connection URL for all binds
+        binds = {
+            "price": db_uri,
+            "supplier": db_uri
+        }
+        app.config["SQLALCHEMY_BINDS"] = binds
+
+        print(f"[DEBUG] Turso URL: {turso_url}")
+        print(f"[DEBUG] Using single Turso database for all binds")
     else:
-        # Local development - use absolute path
-        base_dir = os.path.abspath(os.path.dirname(__file__))
-        db_path = os.path.join(base_dir, "data.db")
+        # Local Development: Use SQLite files
+        print("[INFO] Using local SQLite database files")
+        volume_path = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")
 
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+        if volume_path:
+            db_path = os.path.join(volume_path, "data.db")
+            price_db_path = os.path.join(volume_path, "price.db")
+            supplier_db_path = os.path.join(volume_path, "supplier_stock.db")
+        else:
+            base_dir = os.path.abspath(os.path.dirname(__file__))
+            db_path = os.path.join(base_dir, "data.db")
+            price_db_path = os.path.join(base_dir, "price.db")
+            supplier_db_path = os.path.join(base_dir, "supplier_stock.db")
 
-    # Price DB (bind: price) + Supplier Stock DB (bind: supplier)
-    # Store on Railway Volume if available
-    binds = dict(app.config.get("SQLALCHEMY_BINDS") or {})
+        app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+        app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-    if volume_path:
-        price_db_path = os.path.join(volume_path, "price.db")
-        supplier_db_path = os.path.join(volume_path, "supplier_stock.db")
-    else:
-        base_dir = os.path.abspath(os.path.dirname(__file__))
-        price_db_path = os.path.join(base_dir, "price.db")
-        supplier_db_path = os.path.join(base_dir, "supplier_stock.db")
+        binds = {
+            "price": f"sqlite:///{price_db_path}",
+            "supplier": f"sqlite:///{supplier_db_path}"
+        }
+        app.config["SQLALCHEMY_BINDS"] = binds
 
-    binds.setdefault("price", f"sqlite:///{price_db_path}")
-    binds.setdefault("supplier", f"sqlite:///{supplier_db_path}")
-    app.config["SQLALCHEMY_BINDS"] = binds
-
-    # Debug: พิมพ์ database paths
-    print(f"[DEBUG] Main DB path: {db_path}")
-    print(f"[DEBUG] Price DB path: {price_db_path}")
-    print(f"[DEBUG] Supplier DB path: {supplier_db_path}")
+        print(f"[DEBUG] Main DB path: {db_path}")
+        print(f"[DEBUG] Price DB path: {price_db_path}")
+        print(f"[DEBUG] Supplier DB path: {supplier_db_path}")
 
     db.init_app(app)
 
