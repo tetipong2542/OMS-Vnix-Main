@@ -881,19 +881,90 @@ def create_app():
 
     # =========[ Database Configuration ]=========
     # Support both Turso (Production) and Local SQLite (Development)
+    # NEW: Support Dual Database Mode (sqlite3 old + libsql new)
     turso_url = os.environ.get("TURSO_DATABASE_URL")
     turso_token = os.environ.get("TURSO_AUTH_TOKEN")
+    enable_dual_db = os.environ.get("ENABLE_DUAL_DB_MODE", "").lower() in ("true", "1", "yes")
 
-    if turso_url and turso_token:
+    if enable_dual_db and turso_url and turso_token:
+        # ====================
+        # DUAL DATABASE MODE
+        # ====================
+        # - Old databases (sqlite3): read-only for historical data
+        # - New database (Turso/libSQL): read/write for new data
+        print("[INFO] ⚙️  DUAL DATABASE MODE ENABLED")
+        print("[INFO] Using Turso (libSQL) for NEW data (read/write)")
+        print("[INFO] Using SQLite for OLD data (read-only)")
+
+        # Use Embedded Replica Mode for better performance and reliability
+        # Format: sqlite+libsql:///local-file.db?sync_url=libsql://...&authToken=...
+        local_db_file = os.environ.get("LOCAL_DB", "vnix-erp.db")
+
+        # Clean up file: prefix if present
+        if local_db_file.startswith("file:"):
+            local_db_file = local_db_file[5:]  # Remove "file:" prefix
+
+        # Ensure turso_url uses libsql:// protocol
+        if not turso_url.startswith("libsql://"):
+            if turso_url.startswith("https://"):
+                turso_url = turso_url.replace("https://", "libsql://", 1)
+
+        db_uri = f"sqlite+libsql:///{local_db_file}?sync_url={turso_url}&authToken={turso_token}"
+
+        # Primary database: Turso (for new data)
+        app.config["SQLALCHEMY_DATABASE_URI"] = db_uri
+        app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+        # Setup bind keys for both old and new databases
+        base_dir = os.path.abspath(os.path.dirname(__file__))
+        volume_path = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")
+
+        # Old SQLite databases (read-only)
+        if volume_path:
+            old_data_path = os.path.join(volume_path, "data.db")
+            old_price_path = os.path.join(volume_path, "price.db")
+            old_supplier_path = os.path.join(volume_path, "supplier_stock.db")
+        else:
+            old_data_path = os.path.join(base_dir, "data.db")
+            old_price_path = os.path.join(base_dir, "price.db")
+            old_supplier_path = os.path.join(base_dir, "supplier_stock.db")
+
+        binds = {
+            # New databases on Turso (read/write)
+            "price": db_uri,
+            "supplier": db_uri,
+
+            # Old databases on SQLite (read-only for historical data)
+            "data_old": f"sqlite:///{old_data_path}",
+            "price_old": f"sqlite:///{old_price_path}",
+            "supplier_old": f"sqlite:///{old_supplier_path}"
+        }
+        app.config["SQLALCHEMY_BINDS"] = binds
+
+        print(f"[DEBUG] ✅ Turso (NEW data): {turso_url}")
+        print(f"[DEBUG] ✅ SQLite OLD data.db: {old_data_path}")
+        print(f"[DEBUG] ✅ SQLite OLD price.db: {old_price_path}")
+        print(f"[DEBUG] ✅ SQLite OLD supplier_stock.db: {old_supplier_path}")
+        print(f"[DEBUG] Full Turso URI: {db_uri.replace(turso_token, '***TOKEN***')}")
+
+    elif turso_url and turso_token:
         # Production: Use Turso (libSQL) - Serverless Database
         print("[INFO] Using Turso (libSQL) database")
 
-        # Format: libsql+libsql://database-name.turso.io?authToken=token
-        # Replace libsql:// with libsql+libsql:// for SQLAlchemy dialect
-        if turso_url.startswith("libsql://"):
-            turso_url = turso_url.replace("libsql://", "libsql+libsql://", 1)
+        # Use Embedded Replica Mode for better performance and reliability
+        # Format: sqlite+libsql:///local-file.db?sync_url=libsql://...&authToken=...
+        local_db_file = os.environ.get("LOCAL_DB", "vnix-erp.db")
 
-        db_uri = f"{turso_url}?authToken={turso_token}"
+        # Clean up file: prefix if present
+        if local_db_file.startswith("file:"):
+            local_db_file = local_db_file[5:]  # Remove "file:" prefix
+
+        # Ensure turso_url uses libsql:// protocol
+        if not turso_url.startswith("libsql://"):
+            if turso_url.startswith("https://"):
+                turso_url = turso_url.replace("https://", "libsql://", 1)
+
+        db_uri = f"sqlite+libsql:///{local_db_file}?sync_url={turso_url}&authToken={turso_token}"
 
         app.config["SQLALCHEMY_DATABASE_URI"] = db_uri
         app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
