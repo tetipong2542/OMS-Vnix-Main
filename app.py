@@ -887,7 +887,12 @@ def create_app():
     if turso_url and turso_token:
         # Production: Use Turso (libSQL) - Serverless Database
         print("[INFO] Using Turso (libSQL) database")
-        # Format: libsql://database-name.turso.io?authToken=token
+
+        # Format: libsql+libsql://database-name.turso.io?authToken=token
+        # Replace libsql:// with libsql+libsql:// for SQLAlchemy dialect
+        if turso_url.startswith("libsql://"):
+            turso_url = turso_url.replace("libsql://", "libsql+libsql://", 1)
+
         db_uri = f"{turso_url}?authToken={turso_token}"
 
         app.config["SQLALCHEMY_DATABASE_URI"] = db_uri
@@ -902,6 +907,7 @@ def create_app():
         app.config["SQLALCHEMY_BINDS"] = binds
 
         print(f"[DEBUG] Turso URL: {turso_url}")
+        print(f"[DEBUG] Full DB URI: {db_uri.replace(turso_token, '***TOKEN***')}")
         print(f"[DEBUG] Using single Turso database for all binds")
     else:
         # Local Development: Use SQLite files
