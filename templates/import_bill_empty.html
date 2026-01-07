@@ -1,0 +1,565 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+  <div>
+    <h3 class="mb-1 fw-bold text-dark"><i class="bi bi-file-earmark-text me-2" style="color: #6f42c1;"></i>นำเข้าบิลเปล่า</h3>
+    <div class="text-muted small border-start border-3 ps-3" style="border-color: #6f42c1 !important;">
+      อัพเดตสถานะ Order ID เป็น "บิลเปล่า" จาก Excel หรือ Google Sheet
+    </div>
+  </div>
+  
+  <form method="get" class="bg-white p-2 rounded shadow-sm border d-flex align-items-center gap-2 flex-wrap">
+    <div class="text-secondary small fw-bold text-nowrap">
+      <i class="bi bi-calendar-range me-1"></i> ช่วงวันที่:
+    </div>
+    <div class="d-flex align-items-center gap-1">
+      <input type="date" name="date_from" id="filter_date_from" class="form-control form-control-sm" style="width: 130px;" 
+             value="{{ date_from if date_from else '' }}" onchange="this.form.submit()">
+      <span class="text-muted small">ถึง</span>
+      <input type="date" name="date_to" id="filter_date_to" class="form-control form-control-sm" style="width: 130px;" 
+             value="{{ date_to if date_to else '' }}" onchange="this.form.submit()">
+    </div>
+    
+    <a href="{{ url_for('import_bill_empty_view') }}" class="btn btn-light btn-sm border text-primary fw-bold d-flex align-items-center" title="ล้างค่าเป็นวันนี้">
+      <i class="bi bi-arrow-clockwise me-1"></i> รีเฟรช/วันนี้
+    </a>
+    
+    <div class="badge bg-light text-primary border px-2 py-1 small" style="font-size: 0.75rem;">
+      {{ date_from_thai if date_from_thai else '' }} {% if date_to_thai and date_to_thai != date_from_thai %}ถึง {{ date_to_thai }}{% endif %}
+    </div>
+    
+    <button type="button" class="btn btn-outline-danger btn-sm" onclick="openClearModal()" title="ล้างประวัติ Log">
+      <i class="bi bi-trash-fill"></i> ล้างประวัติ
+    </button>
+  </form>
+</div>
+
+<div class="alert alert-info border-0 shadow-sm mb-4">
+  <i class="bi bi-info-circle me-2"></i>
+  <strong>คำอธิบาย:</strong> บิลเปล่า คือการยิงบิลเปล่าให้กับแพลตฟอร์ม (เช่น Shopee) เพื่อให้ระบบตัด (cut off) ออเดอร์ที่ไม่สามารถจัดส่งได้ในวันนี้ เนื่องจากสินค้ามาไม่ทัน โดยระบบจะอัพเดตสถานะของ Order ID ที่ระบุให้เป็น "บิลเปล่า" เพื่อให้สามารถติดตามและจัดการต่อไปได้
+</div>
+
+<!-- Dashboard Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #f6f8fd 0%, #f1f4f9 100%);">
+      <div class="card-body">
+        <div class="text-muted small fw-bold text-uppercase mb-2">
+          <i class="bi bi-layers-fill me-1"></i> รวมทั้งหมด (ครั้ง)
+        </div>
+        <div class="d-flex align-items-center justify-content-between">
+          <h2 class="mb-0 fw-bold text-primary">{{ stats.total if stats else 0 }}</h2>
+          <i class="bi bi-file-earmark-text text-primary opacity-25 fs-1"></i>
+        </div>
+        <small class="text-muted" style="font-size: 0.75rem;">จำนวนครั้งที่ Import</small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);">
+      <div class="card-body">
+        <div class="text-success small fw-bold text-uppercase mb-2">
+          <i class="bi bi-check-circle-fill me-1"></i> สำเร็จ (ใหม่)
+        </div>
+        <div class="d-flex align-items-center justify-content-between">
+          <h2 class="mb-0 fw-bold text-success">{{ stats.success if stats else 0 }}</h2>
+          <i class="bi bi-check2-all text-success opacity-25 fs-1"></i>
+        </div>
+        <small class="text-success opacity-75" style="font-size: 0.75rem;">
+          ค้าง {{ stats.success_old if stats else 0 }} | นำเข้าสำเร็จ {{ stats.success_new if stats else 0 }} รายการ
+        </small>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);">
+      <div class="card-body">
+        <div class="text-danger small fw-bold text-uppercase mb-2">
+          <i class="bi bi-x-circle-fill me-1"></i> ไม่สำเร็จ (Failed)
+        </div>
+        <div class="d-flex align-items-center justify-content-between">
+          <h2 class="mb-0 fw-bold text-danger">{{ stats.failed if stats else 0 }}</h2>
+          <i class="bi bi-exclamation-triangle text-danger opacity-25 fs-1"></i>
+        </div>
+        <small class="text-danger opacity-75" style="font-size: 0.75rem;">
+          ค้าง {{ stats.failed_old if stats else 0 }} | วันนี้ {{ stats.failed_new if stats else 0 }}
+        </small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Error Details - Grouped by Import -->
+{% if stats and stats.grouped_errors %}
+<div class="alert alert-danger border-0 shadow-sm mb-4">
+  <div class="d-flex align-items-center mb-3 border-bottom pb-2">
+    <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+    <span class="fw-bold">พบรายการที่ไม่สำเร็จ (แบ่งตามไฟล์นำเข้า):</span>
+  </div>
+  
+  <div class="bg-white rounded p-0 text-danger small" style="max-height: 350px; overflow-y: auto;">
+    {% for group in stats.grouped_errors %}
+    <div class="p-2 {% if not loop.last %}border-bottom{% endif %}">
+        <div class="d-flex justify-content-between align-items-center mb-2 bg-light p-2 rounded">
+            <div>
+                <span class="fw-bold text-dark">{{ group.filename }}</span>
+            </div>
+            <span class="text-muted" style="font-size: 0.8em;">
+                <i class="bi bi-clock"></i> {{ group.time }}
+            </span>
+        </div>
+        <ul class="mb-0 ps-4 text-secondary">
+          {% for err in group.errors %}
+            <li>{{ err }}</li>
+          {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Import Forms -->
+<div class="row g-4">
+  <!-- Excel Import -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-white py-3 border-bottom-0">
+        <h5 class="mb-0 fw-bold" style="color: #6f42c1;">
+          <i class="bi bi-file-earmark-excel me-2"></i> นำเข้าจาก Excel
+        </h5>
+      </div>
+      <div class="card-body pt-0">
+        <form method="post" enctype="multipart/form-data" class="row g-3">
+          <input type="hidden" name="mode" value="excel">
+          <div class="col-12">
+            <label class="form-label small fw-bold">
+              ไฟล์ Excel (.xlsx) <span class="text-danger">*</span>
+            </label>
+            <input type="file" name="file" class="form-control" required accept=".xlsx, .xls">
+            <div class="form-text small text-muted">
+              * ไฟล์ต้องมีคอลัมน์ Order ID (รองรับหลายชื่อ: order_id, Order ID, orderNumber, เลข Order, ฯลฯ)
+            </div>
+          </div>
+          <div class="col-12 mt-4">
+            <button class="btn px-4 py-2 fw-bold shadow-sm text-white" style="background: linear-gradient(135deg, #6f42c1 0%, #8b5cf6 100%); border: none;">
+              <i class="bi bi-upload me-2"></i>อัพเดตสถานะบิลเปล่า
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google Sheet Import -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0 h-100">
+      <div class="card-header bg-white py-3 border-bottom-0">
+        <h5 class="mb-0 fw-bold" style="color: #6f42c1;">
+          <i class="bi bi-google me-2"></i> นำเข้าจาก Google Sheet
+        </h5>
+      </div>
+      <div class="card-body pt-0 bg-light bg-opacity-10">
+        <form action="{{ url_for('import_bill_empty_view') }}" method="post" class="row g-3">
+          <input type="hidden" name="mode" value="gsheet">
+          <div class="col-12">
+            <div class="alert alert-light border small text-muted mb-2 py-2">
+              <i class="bi bi-info-circle me-1"></i> 
+              <b>Tab อัตโนมัติ:</b> ระบบจะอ่านจาก Tab ชื่อ <code>Import_Scan_Bill_Empty</code>
+            </div>
+          </div>
+          
+          <div class="col-12">
+            <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
+              <span>Google Sheet URL <span class="text-danger">*</span></span>
+              <div>
+                 <a href="#" onclick="saveUrl(); return false;" class="text-primary small text-decoration-none me-2">
+                   <i class="bi bi-save"></i> บันทึก
+                 </a>
+                 <a href="#" onclick="deleteUrl(); return false;" class="text-danger small text-decoration-none">
+                   <i class="bi bi-trash"></i> ลบ
+                 </a>
+              </div>
+            </label>
+            <div class="input-group">
+              <span class="input-group-text bg-white"><i class="bi bi-link-45deg"></i></span>
+              
+              <input type="text" name="sheet_url" id="gs_url" 
+                     class="form-control font-monospace text-truncate" 
+                     required 
+                     placeholder="วางลิงก์ Google Sheet..."
+                     value="{{ saved_url if saved_url else '' }}">
+            </div>
+            <div class="form-text small text-muted">
+                * Sheet ต้องมี Tab ชื่อ "Import_Scan_Bill_Empty" และมีคอลัมน์ Order ID
+            </div>
+          </div>
+          
+          <div class="col-12 mt-4">
+            <button type="submit" class="btn px-4 py-2 fw-bold shadow-sm text-white" style="background: linear-gradient(135deg, #6f42c1 0%, #8b5cf6 100%); border: none;">
+              <i class="bi bi-cloud-download me-2"></i> ดึงข้อมูลออนไลน์
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ฟังก์ชันบันทึก URL
+async function saveUrl() {
+    const url = document.getElementById('gs_url').value.trim();
+    
+    if(!url) {
+        alert('กรุณาระบุ URL Google Sheet');
+        return;
+    }
+    
+    try {
+        let res = await fetch('/api/shop/url', {
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({shop_name: 'GoogleSheet', platform: 'EMPTY_BILL_SYSTEM', url: url, action: 'save'})
+        });
+        let data = await res.json();
+        if(data.success) {
+            alert('บันทึกลิงก์เรียบร้อยแล้ว');
+        } else {
+            alert(data.msg || 'เกิดข้อผิดพลาด');
+        }
+    } catch(e) { 
+        alert('เกิดข้อผิดพลาดในการบันทึก'); 
+        console.error(e);
+    }
+}
+
+async function deleteUrl() {
+    if(!confirm('ต้องการลบลิงก์ที่บันทึกไว้?')) return;
+    
+    try {
+        let res = await fetch('/api/shop/url', {
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({shop_name: 'GoogleSheet', platform: 'EMPTY_BILL_SYSTEM', action: 'delete'})
+        });
+        let data = await res.json();
+        if(data.success) {
+            document.getElementById('gs_url').value = '';
+            alert('ลบลิงก์เรียบร้อย');
+        } else {
+            alert(data.msg || 'เกิดข้อผิดพลาด');
+        }
+    } catch(e) { 
+        alert('เกิดข้อผิดพลาดในการลบ'); 
+    }
+}
+</script>
+
+<!-- Log History -->
+{% if logs %}
+<div class="card shadow-sm border-0 mt-4">
+  <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+    <h5 class="mb-0 fw-bold">
+      <i class="bi bi-clock-history me-2" style="color: #6f42c1;"></i>ประวัติการ Import
+    </h5>
+    <button type="button" class="btn btn-outline-danger btn-sm" onclick="openClearModal()" title="ล้างประวัติ Log">
+      <i class="bi bi-trash-fill"></i> ล้างประวัติ
+    </button>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+      <table class="table table-hover table-sm mb-0">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th class="small">วันที่</th>
+            <th class="small">ไฟล์</th>
+            <th class="small text-center">สำเร็จ</th>
+            <th class="small text-center">ไม่สำเร็จ</th>
+            <th class="small">เวลา</th>
+            <th class="small text-center">รายละเอียด</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td class="small">{{ log.import_date.strftime('%d/%m/%Y') if log.import_date else '-' }}</td>
+            <td class="small text-truncate" style="max-width: 200px;" title="{{ log.filename or '-' }}">
+              {{ log.filename or '-' }}
+            </td>
+            <td class="small text-center">
+              <span class="badge bg-success">{{ log.added_count }}</span>
+            </td>
+            <td class="small text-center">
+              {% if log.failed_count > 0 %}
+                <span class="badge bg-danger">{{ log.failed_count }}</span>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">
+              {{ log.created_at.strftime('%d/%m/%Y %H:%M') if log.created_at else '-' }}
+            </td>
+            <td class="small text-center">
+              <button class="btn btn-outline-primary btn-sm" 
+                      data-log-id="{{ log.id }}" 
+                      data-filename="{{ log.filename or '' }}" 
+                      data-added="{{ log.added_count }}" 
+                      data-failed="{{ log.failed_count }}" 
+                      data-duplicates="{{ log.duplicates_count or 0 }}"
+                      onclick="viewLogDetails(this)" 
+                      title="ดูรายละเอียด">
+                <i class="bi bi-eye-fill"></i> View
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Modal: ยืนยันการลบประวัติ -->
+<div class="modal fade" id="clearLogsModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+      <div class="modal-header bg-danger text-white" style="border-radius: 15px 15px 0 0;">
+        <h5 class="modal-title">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i> ยืนยันการล้างประวัติ
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form method="post" action="{{ url_for('clear_bill_empty_logs') }}" id="clearLogsForm">
+        <div class="modal-body p-4">
+          <div class="alert alert-warning border-0 bg-light d-flex align-items-start mb-3">
+            <i class="bi bi-info-circle text-warning fs-4 me-3"></i>
+            <div>
+              <strong>คำเตือน:</strong> การลบประวัติจะไม่สามารถกู้คืนได้
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="fw-bold mb-2">เลือกรูปแบบการลบ:</label>
+
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="radio" name="delete_mode" id="deleteRange" value="range" checked>
+              <label class="form-check-label" for="deleteRange">
+                ลบตามช่วงวันที่ที่เลือก
+              </label>
+            </div>
+
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="delete_mode" id="deleteAll" value="all">
+              <label class="form-check-label text-danger fw-bold" for="deleteAll">
+                ลบทั้งหมด (All Time)
+              </label>
+            </div>
+          </div>
+
+          <div id="dateRangeInfo" class="alert alert-info border-0 mb-0">
+            <i class="bi bi-calendar-range me-2"></i>
+            จะลบข้อมูลในช่วง: <strong>{{ date_from_thai if date_from_thai else '' }} ถึง {{ date_to_thai if date_to_thai else '' }}</strong>
+          </div>
+
+          <input type="hidden" name="date_from" value="{{ date_from if date_from else '' }}">
+          <input type="hidden" name="date_to" value="{{ date_to if date_to else '' }}">
+          <input type="hidden" name="clear_all" id="clearAllInput" value="false">
+        </div>
+
+        <div class="modal-footer bg-light border-0" style="border-radius: 0 0 15px 15px;">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">ยกเลิก</button>
+          <button type="submit" class="btn btn-danger fw-bold px-4">
+            <i class="bi bi-trash-fill me-2"></i>ยืนยันการลบ
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: รายละเอียด Order IDs -->
+<div class="modal fade" id="logDetailsModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+      <div class="modal-header bg-primary text-white" style="border-radius: 15px 15px 0 0;">
+        <h5 class="modal-title">
+          <i class="bi bi-file-earmark-text me-2"></i> รายละเอียด Order IDs
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body p-4">
+        <div class="mb-3">
+          <strong>ไฟล์:</strong> <span id="detailFilename" class="text-primary"></span>
+        </div>
+
+        <!-- Tabs -->
+        <ul class="nav nav-tabs mb-3" id="orderTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="success-tab" data-bs-toggle="tab" data-bs-target="#success-panel" type="button">
+              <i class="bi bi-check-circle-fill text-success me-1"></i> สำเร็จ <span class="badge bg-success ms-1" id="successCount">0</span>
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="failed-tab" data-bs-toggle="tab" data-bs-target="#failed-panel" type="button">
+              <i class="bi bi-x-circle-fill text-danger me-1"></i> ไม่สำเร็จ <span class="badge bg-danger ms-1" id="failedCount">0</span>
+            </button>
+          </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content">
+          <!-- Success Panel -->
+          <div class="tab-pane fade show active" id="success-panel">
+            <div id="successList" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+              <p class="text-muted text-center mb-0">ไม่มีรายการ</p>
+            </div>
+            <button class="btn btn-outline-success btn-sm w-100 mt-2 d-none" id="loadMoreSuccess" onclick="loadMoreOrders('success')">
+              <i class="bi bi-chevron-down me-1"></i> โหลดเพิ่มเติม
+            </button>
+          </div>
+
+          <!-- Failed Panel -->
+          <div class="tab-pane fade" id="failed-panel">
+            <div id="failedList" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+              <p class="text-muted text-center mb-0">ไม่มีรายการ</p>
+            </div>
+            <button class="btn btn-outline-danger btn-sm w-100 mt-2 d-none" id="loadMoreFailed" onclick="loadMoreOrders('failed')">
+              <i class="bi bi-chevron-down me-1"></i> โหลดเพิ่มเติม
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer bg-light border-0" style="border-radius: 0 0 15px 15px;">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ตัวแปรสำหรับเก็บข้อมูล
+let logData = {
+  success: [],
+  failed: []
+};
+let currentDisplay = {
+  success: 0,
+  failed: 0
+};
+const ITEMS_PER_PAGE = 20;
+
+// เปิด Modal รายละเอียด
+async function viewLogDetails(button) {
+  const logId = button.getAttribute('data-log-id');
+  const filename = button.getAttribute('data-filename');
+  
+  document.getElementById('detailFilename').textContent = filename || 'Unknown';
+  
+  // Reset data
+  logData = { success: [], failed: [] };
+  currentDisplay = { success: 0, failed: 0 };
+  
+  // Fetch details from server
+  try {
+    const response = await fetch(`/api/import/bill_empty/log/${logId}`);
+    const data = await response.json();
+    
+    if (data.success) {
+      logData.success = data.new_ids || [];
+      logData.failed = data.failed_ids_list || [];  // เปลี่ยนใช้ failed_ids_list แทน
+
+      // Update counts
+      document.getElementById('successCount').textContent = logData.success.length;
+      document.getElementById('failedCount').textContent = logData.failed.length;
+
+      // Load first page
+      loadMoreOrders('success');
+      loadMoreOrders('failed');
+    } else {
+      alert('ไม่สามารถดึงข้อมูลได้: ' + (data.message || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    alert('เกิดข้อผิดพลาดในการดึงข้อมูล');
+  }
+  
+  // Show modal
+  const modal = new bootstrap.Modal(document.getElementById('logDetailsModal'));
+  modal.show();
+}
+
+// โหลดรายการเพิ่มเติม
+function loadMoreOrders(type) {
+  const container = document.getElementById(`${type}List`);
+  const loadMoreBtn = document.getElementById(`loadMore${type.charAt(0).toUpperCase() + type.slice(1)}`);
+  
+  const items = logData[type];
+  const startIdx = currentDisplay[type];
+  const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, items.length);
+  
+  if (startIdx === 0) {
+    container.innerHTML = '';
+  }
+  
+  // Render items
+  for (let i = startIdx; i < endIdx; i++) {
+    const div = document.createElement('div');
+    div.className = 'p-2 border-bottom small';
+    div.innerHTML = `<span class="fw-bold">${i + 1}.</span> ${items[i]}`;
+    container.appendChild(div);
+  }
+  
+  currentDisplay[type] = endIdx;
+  
+  // Show/hide load more button
+  if (endIdx < items.length) {
+    loadMoreBtn.classList.remove('d-none');
+    loadMoreBtn.innerHTML = `<i class="bi bi-chevron-down me-1"></i> โหลดเพิ่มเติม (${items.length - endIdx} รายการ)`;
+  } else {
+    loadMoreBtn.classList.add('d-none');
+  }
+  
+  // Show message if no items
+  if (items.length === 0) {
+    container.innerHTML = '<p class="text-muted text-center mb-0">ไม่มีรายการ</p>';
+  }
+}
+
+// เปิด Modal ยืนยันการลบ
+function openClearModal() {
+    const modal = new bootstrap.Modal(document.getElementById('clearLogsModal'));
+    modal.show();
+}
+
+// อัพเดทค่า clear_all เมื่อเปลี่ยน radio button
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteRangeRadio = document.getElementById('deleteRange');
+    const deleteAllRadio = document.getElementById('deleteAll');
+    const clearAllInput = document.getElementById('clearAllInput');
+    const dateRangeInfo = document.getElementById('dateRangeInfo');
+
+    if (deleteRangeRadio && deleteAllRadio) {
+        deleteRangeRadio.addEventListener('change', function() {
+            if (this.checked) {
+                clearAllInput.value = 'false';
+                dateRangeInfo.classList.remove('d-none');
+            }
+        });
+
+        deleteAllRadio.addEventListener('change', function() {
+            if (this.checked) {
+                clearAllInput.value = 'true';
+                dateRangeInfo.classList.add('d-none');
+            }
+        });
+    }
+});
+</script>
+
+{% endblock %}
