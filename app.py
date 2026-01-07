@@ -49,6 +49,16 @@ from allocation import compute_allocation
 # โหลด environment variables จากไฟล์ .env (สำหรับ Local Development)
 load_dotenv()
 
+# Import sqlalchemy_libsql to register the libsql dialect
+# This must be imported before creating any SQLAlchemy engines
+# The import automatically registers "sqlite.libsql" and "sqlite.aiolibsql" dialects
+try:
+    import sqlalchemy_libsql
+except ImportError:
+    # If sqlalchemy_libsql is not installed, Turso features won't be available
+    # The app will fall back to local SQLite mode
+    pass
+
 # Suppress deprecation warnings for legacy code
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*datetime.*utcnow.*")
