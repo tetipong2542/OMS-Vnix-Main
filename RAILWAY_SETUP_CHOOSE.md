@@ -179,3 +179,17 @@ A: ประมาณ $0.25/GB/month → 1GB = ~$0.25/month, 20GB = ~$5/month
 **Q: แนะนำให้ใช้อะไร?**
 
 A: **เริ่มด้วย Remote-only** ก่อน → ถ้าช้าเกินไปค่อยเปลี่ยนเป็น Embedded Replica
+
+**Q: ถ้าฉันแก้ไขข้อมูลใน Turso Dashboard แล้ว Refresh หน้าเว็บไม่เห็นการเปลี่ยนแปลงจะทำยังไง?**
+
+A: ใช้ฟีเจอร์ **Manual Sync from Turso Cloud** โดยไปที่:
+- เข้า Dashboard → ไปที่ `/admin/sync-turso` (หรือ Admin Menu)
+- คลิกปุ่ม "Sync from Turso Cloud"
+- รอ 10-30 วินาที ระบบจะดึงข้อมูลล่าสุดจาก Turso มาที่ local embedded replica
+- ข้อมูลจะอัปเดตทันที
+
+**หมายเหตุ:** การ sync ปกติจะเกิดขึ้นอัตโนมัติเมื่อ:
+1. App เริ่มต้นทำงาน (startup)
+2. มีการ Write ข้อมูลผ่านหน้าเว็บ
+
+แต่ถ้าแก้ข้อมูลผ่าน Turso Dashboard โดยตรง → ต้อง Manual Sync
