@@ -898,15 +898,15 @@ def create_app():
     # NEW: Check for 3 separate Turso databases
     data_url = os.environ.get("DATA_DB_URL")
     data_token = os.environ.get("DATA_DB_AUTH_TOKEN")
-    data_local = os.environ.get("DATA_DB_LOCAL", "data.db")
+    data_local = os.environ.get("DATA_DB_LOCAL")  # No default - must be explicitly set for embedded replica
 
     price_url = os.environ.get("PRICE_DB_URL")
     price_token = os.environ.get("PRICE_DB_AUTH_TOKEN")
-    price_local = os.environ.get("PRICE_DB_LOCAL", "price.db")
+    price_local = os.environ.get("PRICE_DB_LOCAL")  # No default - must be explicitly set for embedded replica
 
     supplier_url = os.environ.get("SUPPLIER_DB_URL")
     supplier_token = os.environ.get("SUPPLIER_DB_AUTH_TOKEN")
-    supplier_local = os.environ.get("SUPPLIER_DB_LOCAL", "supplier_stock.db")
+    supplier_local = os.environ.get("SUPPLIER_DB_LOCAL")  # No default - must be explicitly set for embedded replica
 
     # OLD: Support legacy single Turso database mode (fallback)
     turso_url = os.environ.get("TURSO_DATABASE_URL")
