@@ -1742,6 +1742,59 @@ def create_app():
 
         return turso_dbs
 
+    def repair_and_prepare_db_for_turso(db_path):
+        """
+        Repair and prepare SQLite database for Turso sync.
+
+        Steps:
+        1. Check database integrity
+        2. Convert to WAL mode (required by Turso)
+        3. Checkpoint WAL to consolidate data
+        4. Vacuum to optimize
+
+        Returns: (success: bool, message: str)
+        """
+        import sqlite3
+
+        try:
+            # Step 1: Check integrity
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("PRAGMA integrity_check")
+            integrity_result = cursor.fetchone()[0]
+
+            if integrity_result != "ok":
+                conn.close()
+                return False, f"Database integrity check failed: {integrity_result}"
+
+            # Step 2: Convert to WAL mode (Turso requirement)
+            cursor.execute("PRAGMA journal_mode")
+            current_mode = cursor.fetchone()[0]
+
+            if current_mode.lower() != 'wal':
+                cursor.execute("PRAGMA journal_mode=WAL")
+                new_mode = cursor.fetchone()[0]
+                app.logger.info(f"Converted database from {current_mode} to {new_mode} mode")
+
+            # Step 3: Checkpoint WAL to consolidate
+            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            checkpoint_result = cursor.fetchall()
+            app.logger.info(f"WAL checkpoint result: {checkpoint_result}")
+
+            # Step 4: Vacuum to optimize and repair
+            cursor.execute("VACUUM")
+            app.logger.info("Database vacuumed successfully")
+
+            conn.commit()
+            conn.close()
+
+            return True, "Database prepared successfully for Turso sync"
+
+        except Exception as e:
+            app.logger.exception(f"Database repair failed: {e}")
+            return False, f"Database repair failed: {str(e)}"
+
     @app.route("/api/userpref/set", methods=["POST"])
     @login_required
     def api_userpref_set():
@@ -11358,6 +11411,25 @@ def create_app():
             # Get file size
             size_mb = os.path.getsize(local_path) / (1024 * 1024)
 
+            # Repair and prepare database for Turso
+            app.logger.info(f"Preparing database {db_name} for Turso sync...")
+            repair_success, repair_message = repair_and_prepare_db_for_turso(local_path)
+
+            if not repair_success:
+                # Repair failed - restore backup
+                if backup_filename and os.path.exists(backup_path):
+                    import shutil
+                    shutil.copy2(backup_path, local_path)
+                    app.logger.warning(f"Restored backup due to repair failure: {repair_message}")
+
+                return jsonify({
+                    'success': False,
+                    'error': f'Database validation failed: {repair_message}',
+                    'details': 'ไฟล์ฐานข้อมูลอาจเสียหายหรือไม่ถูกต้อง กรุณาตรวจสอบไฟล์และลองใหม่อีกครั้ง',
+                    'size': f'{size_mb:.2f} MB',
+                    'backup_restored': True
+                }), 400
+
             # Sync to Turso cloud
             try:
                 import libsql_experimental as libsql
@@ -11367,6 +11439,8 @@ def create_app():
                 token = os.environ.get(token_key)
 
                 if url and token:
+                    app.logger.info(f"Syncing {db_name} to Turso cloud...")
+
                     # Open connection and sync
                     conn = libsql.connect(local_path, sync_url=url, auth_token=token)
                     conn.sync()  # Push local changes to Turso
@@ -11376,10 +11450,11 @@ def create_app():
 
                     return jsonify({
                         'success': True,
-                        'message': f'อัปโหลดและ sync ไปยัง Turso สำเร็จ',
+                        'message': f'อัปโหลด ซ่อมแซม และ sync ไปยัง Turso สำเร็จ',
                         'size': f'{size_mb:.2f} MB',
                         'backup': backup_filename,
-                        'synced_to_turso': True
+                        'synced_to_turso': True,
+                        'repair_message': repair_message
                     })
                 else:
                     return jsonify({
@@ -11392,14 +11467,23 @@ def create_app():
 
             except Exception as sync_error:
                 app.logger.error(f"Turso sync failed: {sync_error}")
+
+                # Restore backup on sync failure
+                if backup_filename and os.path.exists(backup_path):
+                    import shutil
+                    shutil.copy2(backup_path, local_path)
+                    app.logger.warning(f"Restored backup due to sync failure")
+
                 return jsonify({
-                    'success': True,
-                    'message': f'อัปโหลดสำเร็จ แต่การ sync ไปยัง Turso ล้มเหลว: {str(sync_error)}',
+                    'success': False,
+                    'error': f'การ sync ไปยัง Turso ล้มเหลว: {str(sync_error)}',
+                    'details': 'ไฟล์อัปโหลดสำเร็จแต่ไม่สามารถ sync ไปยัง Turso ได้ และได้ restore backup กลับแล้ว',
                     'size': f'{size_mb:.2f} MB',
                     'backup': backup_filename,
                     'synced_to_turso': False,
-                    'sync_error': str(sync_error)
-                }), 206  # 206 Partial Content
+                    'sync_error': str(sync_error),
+                    'backup_restored': True
+                }), 500
 
         except Exception as e:
             app.logger.exception(f"Turso database upload failed for {db_name}")
