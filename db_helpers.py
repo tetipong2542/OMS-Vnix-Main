@@ -229,3 +229,147 @@ def dual_query_auto(model: Type, filters: Optional[dict] = None, order_by: Optio
     """
     bind_old = get_old_bind_for_model(model)
     return dual_query(model, bind_old=bind_old, filters=filters, order_by=order_by)
+
+
+# ========================================
+# Turso-specific helpers for reliability
+# ========================================
+
+import time
+import logging
+from functools import wraps
+from typing import Callable, Any
+from sqlalchemy.exc import OperationalError, DatabaseError, IntegrityError
+
+logger = logging.getLogger(__name__)
+
+
+def retry_on_db_error(max_retries: int = 3, delay: float = 0.5):
+    """
+    Decorator to retry database operations on transient errors
+
+    Turso/LibSQL can have temporary sync issues, this helps handle them gracefully
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            last_error = None
+
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except (OperationalError, DatabaseError) as e:
+                    last_error = e
+                    error_msg = str(e).lower()
+
+                    # Check if it's a retryable error
+                    retryable = any(keyword in error_msg for keyword in [
+                        'disk i/o error',
+                        'database is locked',
+                        'cannot commit',
+                        'sync',
+                        'timeout'
+                    ])
+
+                    if not retryable or attempt == max_retries - 1:
+                        logger.error(f"Database error (non-retryable or max retries): {e}")
+                        raise
+
+                    # Rollback and wait before retry
+                    try:
+                        from models import db
+                        db.session.rollback()
+                    except Exception:
+                        pass
+
+                    wait_time = delay * (2 ** attempt)  # Exponential backoff
+                    logger.warning(f"Database error (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+
+            # If we get here, all retries failed
+            raise last_error
+
+        return wrapper
+    return decorator
+
+
+@retry_on_db_error(max_retries=3, delay=0.5)
+def safe_commit() -> bool:
+    """
+    Safely commit database session with retry logic
+
+    Returns:
+        True if commit succeeded, False otherwise
+    """
+    from models import db
+    try:
+        db.session.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Commit failed: {e}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        raise
+
+
+def batch_add_and_commit(objects: list, batch_size: int = 100) -> int:
+    """
+    Add objects to database in batches and commit
+
+    This is more efficient for large imports and works better with Turso
+
+    Args:
+        objects: List of SQLAlchemy model instances to add
+        batch_size: Number of objects to add before committing (default: 100)
+
+    Returns:
+        Number of objects successfully added
+    """
+    from models import db
+    total_added = 0
+
+    try:
+        for i in range(0, len(objects), batch_size):
+            batch = objects[i:i + batch_size]
+
+            try:
+                # Add batch to session
+                for obj in batch:
+                    db.session.add(obj)
+
+                # Commit the batch with retry
+                safe_commit()
+                total_added += len(batch)
+
+                logger.info(f"Batch committed: {len(batch)} objects (total: {total_added}/{len(objects)})")
+
+            except IntegrityError as e:
+                # Handle duplicate key errors gracefully
+                logger.warning(f"IntegrityError in batch at index {i}: {e}")
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                # Continue with next batch
+                continue
+            except Exception as e:
+                logger.error(f"Batch commit failed at index {i}: {e}")
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                # Continue with next batch instead of failing completely
+                continue
+
+        return total_added
+
+    except Exception as e:
+        logger.error(f"Batch operation failed: {e}")
+        try:
+            from models import db
+            db.session.rollback()
+        except Exception:
+            pass
+        raise
