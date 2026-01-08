@@ -9,15 +9,16 @@ db = SQLAlchemy()
 
 class Shop(db.Model):
     __tablename__ = "shops"
+    __table_args__ = (
+        db.UniqueConstraint("platform", "name", name="uq_shops_platform_name"),
+        {'extend_existing': True}
+    )
+    
     id = db.Column(db.Integer, primary_key=True)
     platform = db.Column(db.String(64), index=True)
     name = db.Column(db.String(128), nullable=False, index=True)
     is_system_config = db.Column(db.Boolean, default=False, index=True)  # Flag แยกระหว่างร้านจริง vs config system
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(TH_TZ))
-
-    __table_args__ = (
-        db.UniqueConstraint("platform", "name", name="uq_shops_platform_name"),
-    )
 
 class Product(db.Model):
     __tablename__ = "products"
