@@ -1345,12 +1345,54 @@ def create_app():
         if using_turso:
             # For Turso embedded replica: sync data from cloud instead of creating empty tables
             print(f"[INFO] 🔄 Syncing data from Turso cloud databases...")
+            print(f"[INFO] ⏳ Initial sync may take 20-30 seconds...")
+
+            # CRITICAL FIX: Force sync with libsql client BEFORE SQLAlchemy
+            # This downloads data from Turso cloud to local embedded replica files
+            try:
+                import libsql_experimental as libsql
+
+                data_path = data_local if data_local else "/tmp/data-tetipong2542.db"
+                price_path = price_local if price_local else "/tmp/price-tetipong2542.db"
+                supplier_path = supplier_local if supplier_local else "/tmp/supplier-stock-tetipong2542.db"
+
+                print(f"[DEBUG] 🔄 Pre-syncing data.db from Turso cloud...")
+                conn_data = libsql.connect(data_path, sync_url=data_url, auth_token=data_token)
+                conn_data.sync()
+                cursor = conn_data.cursor()
+                cursor.execute("SELECT COUNT(*) FROM products")
+                count = cursor.fetchone()[0]
+                print(f"[DEBUG] ✅ data.db synced: {count} products")
+                conn_data.close()
+
+                print(f"[DEBUG] 🔄 Pre-syncing price.db from Turso cloud...")
+                conn_price = libsql.connect(price_path, sync_url=price_url, auth_token=price_token)
+                conn_price.sync()
+                cursor = conn_price.cursor()
+                cursor.execute("SELECT COUNT(*) FROM sku_pricing")
+                count = cursor.fetchone()[0]
+                print(f"[DEBUG] ✅ price.db synced: {count} SKU pricings")
+                conn_price.close()
+
+                print(f"[DEBUG] 🔄 Pre-syncing supplier_stock.db from Turso cloud...")
+                conn_supplier = libsql.connect(supplier_path, sync_url=supplier_url, auth_token=supplier_token)
+                conn_supplier.sync()
+                cursor = conn_supplier.cursor()
+                cursor.execute("SELECT COUNT(*) FROM supplier_sku_master")
+                count = cursor.fetchone()[0]
+                print(f"[DEBUG] ✅ supplier_stock.db synced: {count} supplier SKUs")
+                conn_supplier.close()
+
+                print(f"[INFO] ✅ All databases pre-synced successfully!")
+
+            except Exception as e:
+                print(f"[ERROR] Failed to pre-sync with libsql: {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"[WARNING] Continuing anyway - databases may be empty...")
 
             try:
-                # Force sync by executing a simple query on each database
-                # This triggers libsql to download schema and data from Turso
-
-                print(f"[DEBUG] Syncing main database (data)...")
+                print(f"[DEBUG] Verifying synced data with SQLAlchemy...")
                 with db.engine.connect() as conn:
                     # Try to query existing tables to trigger sync
                     try:
