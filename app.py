@@ -17232,7 +17232,6 @@ def create_app():
     # =============================================================================
     @app.route("/admin/sync-turso", methods=["GET", "POST"])
     @login_required
-    @admin_required
     def admin_sync_turso():
         """
         Manually force sync data from Turso cloud to local embedded replica files.
@@ -17242,6 +17241,12 @@ def create_app():
         - Data on web app is outdated
         - Need to refresh local cache
         """
+        # Check if user is admin
+        cu = current_user()
+        if cu.role != "admin":
+            flash("ต้องเป็นผู้ดูแลระบบเท่านั้น", "danger")
+            return redirect(url_for("dashboard"))
+
         if request.method == "GET":
             return render_template("admin_sync_turso.html")
 
