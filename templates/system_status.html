@@ -1,0 +1,965 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+    /* Clean & Professional Minimalist Theme */
+    :root {
+        --bg-primary: #FFFFFF;
+        --bg-secondary: #F8F9FA;
+        --text-primary: #1A1A1A;
+        --text-secondary: #6C757D;
+        --border-color: #E5E5E5;
+        --accent-color: #4A4A4A;
+        --success-color: #2D3748;
+        --warning-color: #718096;
+        --danger-color: #A0AEC0;
+    }
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    .status-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: var(--bg-secondary);
+        min-height: 100vh;
+    }
+
+    /* Protection Info Badge */
+    .protection-badge {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .protection-badge.enabled {
+        background: rgba(220, 53, 69, 0.9);
+    }
+
+    .protection-badge.disabled {
+        background: rgba(40, 167, 69, 0.9);
+    }
+
+    /* Header */
+    .status-header {
+        margin-bottom: 40px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .status-header h1 {
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+    }
+
+    .status-header p {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        font-weight: 400;
+    }
+
+    /* Alert Box */
+    .alert-box {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px 24px;
+        margin-bottom: 32px;
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .alert-box.success {
+        border-left: 4px solid var(--success-color);
+    }
+
+    .alert-box.warning {
+        border-left: 4px solid var(--warning-color);
+    }
+
+    .alert-icon {
+        font-size: 1.25rem;
+        color: var(--text-primary);
+        font-weight: 600;
+        min-width: 24px;
+    }
+
+    .alert-content strong {
+        display: block;
+        color: var(--text-primary);
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .alert-content p {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    /* Card Sections */
+    .status-section {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 28px;
+        margin-bottom: 24px;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    /* Info Grid */
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+    }
+
+    .info-item {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 0;
+    }
+
+    .info-label {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .info-value {
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+    }
+
+    /* Status Badges */
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .badge-success {
+        background: #E6F4EA;
+        color: #1E7E34;
+    }
+
+    .badge-warning {
+        background: #FFF3CD;
+        color: #856404;
+    }
+
+    .badge-danger {
+        background: #F8D7DA;
+        color: #721C24;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .stat-card {
+        background: var(--bg-secondary);
+        padding: 20px;
+        border-radius: 6px;
+        text-align: center;
+    }
+
+    .stat-label {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+    }
+
+    .stat-value {
+        color: var(--text-primary);
+        font-size: 2rem;
+        font-weight: 600;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* Table Style */
+    .info-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+    }
+
+    .info-table th {
+        text-align: left;
+        padding: 10px 12px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .info-table td {
+        padding: 12px;
+        border-bottom: 1px solid #F1F3F5;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+    }
+
+    .info-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .info-table td:first-child {
+        color: var(--text-secondary);
+        font-weight: 500;
+        width: 200px;
+    }
+
+    .info-table td:last-child {
+        font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+    }
+
+    /* Database Card */
+    .db-card {
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 20px;
+        margin-bottom: 16px;
+        background: var(--bg-secondary);
+    }
+
+    .db-card h3 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0 0 12px 0;
+    }
+
+    /* Buttons */
+    .db-button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        transition: opacity 0.2s;
+    }
+
+    .db-button:hover {
+        opacity: 0.8;
+    }
+
+    .btn-download {
+        background: #2D3748;
+        color: white;
+    }
+
+    .btn-upload {
+        background: #718096;
+        color: white;
+    }
+
+    .btn-backup {
+        background: #4A5568;
+        color: white;
+    }
+
+    .btn-download-all {
+        background: #1A1A1A;
+        color: white;
+        padding: 10px 24px;
+    }
+
+    /* Back Button */
+    .back-button {
+        display: inline-block;
+        margin-top: 32px;
+        padding: 12px 32px;
+        background: var(--text-primary);
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        transition: background 0.2s ease;
+    }
+
+    .back-button:hover {
+        background: var(--accent-color);
+        color: white;
+        text-decoration: none;
+    }
+
+    /* Spinner Animation */
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .info-item {
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .info-table td:first-child {
+            width: auto;
+        }
+    }
+</style>
+
+<div class="status-container">
+    <!-- Header -->
+    <div class="status-header">
+        <h1>System Status</h1>
+        <p>Database connection and system information overview</p>
+    </div>
+
+    <!-- Connection Status Alert -->
+    {% if status.volume_path != "Not Configured" %}
+    <div class="alert-box success">
+        <div class="alert-icon">✓</div>
+        <div class="alert-content">
+            <strong>System Operational</strong>
+            <p>Railway Volume is connected. Database files are persistent and will not be lost after deployment.</p>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert-box warning">
+        <div class="alert-icon">!</div>
+        <div class="alert-content">
+            <strong>Volume Not Configured</strong>
+            <p>Railway Volume is not set up. Data may be lost after redeployment.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Volume Information -->
+    <div class="status-section">
+        <h2 class="section-title">Storage Information</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Location</div>
+                <div class="info-value">
+                    {% if status.volume_path != "Not Configured" %}
+                        <span class="status-badge badge-success">{{ status.db_location }}</span>
+                    {% else %}
+                        <span class="status-badge badge-warning">{{ status.db_location }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Volume Mount Path</div>
+                <div class="info-value">
+                    {% if status.volume_path != "Not Configured" %}
+                        <span class="status-badge badge-success">{{ status.volume_path }}</span>
+                    {% else %}
+                        <span class="status-badge badge-danger">{{ status.volume_path }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if status.has_turso %}
+            <div class="info-item">
+                <div class="info-label">Turso Databases</div>
+                <div class="info-value">
+                    <span class="status-badge badge-success">{{ status.turso_databases|length }} Connected</span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Sync Mode</div>
+                <div class="info-value">
+                    {% set first_db = status.turso_databases.values()|first %}
+                    <span class="status-badge badge-success">{{ first_db.mode }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Database Files (3 DBs) -->
+    <div class="status-section">
+        <h2 class="section-title">Database Files</h2>
+
+        {% for db_type, db_info in status.databases.items() %}
+        <div class="db-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3>{{ db_info.name }}</h3>
+                {% if db_info.exists %}
+                    <span class="status-badge badge-success">Active</span>
+                {% else %}
+                    <span class="status-badge badge-danger">Not Found</span>
+                {% endif %}
+            </div>
+
+            <table class="info-table" style="margin-bottom: 12px;">
+                <tr>
+                    <td>Path</td>
+                    <td>{{ db_info.path }}</td>
+                </tr>
+                <tr>
+                    <td>Size</td>
+                    <td>{{ db_info.size }}</td>
+                </tr>
+                {% if db_info.modified %}
+                <tr>
+                    <td>Last Modified</td>
+                    <td>{{ db_info.modified }}</td>
+                </tr>
+                {% endif %}
+            </table>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                {% if db_info.exists %}
+                <a href="{{ url_for('download_database', db_type=db_type) }}"
+                   class="db-button btn-download">
+                    Download
+                </a>
+                <button onclick="createBackup('{{ db_type }}')"
+                        class="db-button btn-backup">
+                    Create Backup
+                </button>
+                {% endif %}
+                <button onclick="uploadDB('{{ db_type }}')"
+                        class="db-button btn-upload"
+                        id="upload-btn-{{ db_type }}">
+                    Upload & Replace
+                </button>
+                <input type="file" id="file-{{ db_type }}" accept=".db" style="display: none;" onchange="handleUpload('{{ db_type }}')">
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if status.has_turso %}
+        <!-- Turso Cloud Databases -->
+        <h3 style="font-size: 1.2rem; font-weight: 600; margin: 32px 0 16px 0; color: var(--text-primary); padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
+            ☁️ Turso Cloud Databases
+        </h3>
+
+        {% for db_name, db_info in status.turso_databases.items() %}
+        <div class="db-card" style="border-left: 3px solid #3498db;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3>{{ db_info.name }}</h3>
+                {% if db_info.local_exists %}
+                    <span class="status-badge badge-success">Synced</span>
+                {% else %}
+                    <span class="status-badge badge-warning">Not Synced</span>
+                {% endif %}
+            </div>
+
+            <table class="info-table" style="margin-bottom: 12px;">
+                <tr>
+                    <td>Turso URL</td>
+                    <td style="font-size: 0.85rem; word-break: break-all;">{{ db_info.url }}</td>
+                </tr>
+                <tr>
+                    <td>Mode</td>
+                    <td>{{ db_info.mode }}</td>
+                </tr>
+                <tr>
+                    <td>Local Replica Path</td>
+                    <td>{{ db_info.local_path }}</td>
+                </tr>
+                {% if db_info.local_exists %}
+                <tr>
+                    <td>Local Size</td>
+                    <td>{{ db_info.local_size }}</td>
+                </tr>
+                <tr>
+                    <td>Last Modified</td>
+                    <td>{{ db_info.local_modified }}</td>
+                </tr>
+                {% endif %}
+            </table>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                {% if db_info.local_exists %}
+                <a href="{{ url_for('download_turso_database', db_name=db_name) }}"
+                   class="db-button btn-download">
+                    Download
+                </a>
+                {% endif %}
+                <button onclick="uploadTursoDB('{{ db_name }}')"
+                        class="db-button btn-upload"
+                        id="upload-turso-btn-{{ db_name }}">
+                    Upload & Sync to Turso
+                </button>
+                <input type="file" id="file-turso-{{ db_name }}" accept=".db" style="display: none;" onchange="handleTursoUpload('{{ db_name }}')">
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        <div style="margin-top: 20px; padding: 16px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px;">
+            <a href="{{ url_for('download_all_databases') }}"
+               class="db-button btn-download-all">
+                Download All Databases (ZIP)
+            </a>
+        </div>
+    </div>
+
+    <!-- Turso Cloud Sync -->
+    <div class="status-section">
+        <h2 class="section-title">🔄 Turso Cloud Sync</h2>
+
+        <div class="alert-box" style="border-left: 4px solid #3498db; margin-bottom: 20px;">
+            <div class="alert-icon">ℹ️</div>
+            <div class="alert-content">
+                <strong>Manual Sync from Turso Cloud</strong>
+                <p style="margin-bottom: 8px;">ใช้เมื่อคุณแก้ไขข้อมูลโดยตรงใน Turso Dashboard (ผ่าน CLI หรือ Web UI) และต้องการดึงข้อมูลล่าสุดมาที่หน้าเว็บ</p>
+                <p style="margin-bottom: 0; font-size: 0.85rem;">
+                    <strong>หมายเหตุ:</strong> การแก้ไขข้อมูลผ่านหน้าเว็บจะ sync ไป Turso อัตโนมัติ ไม่ต้องกดปุ่มนี้
+                </p>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px;">
+            <button id="syncTursoBtn" class="db-button btn-download-all" onclick="syncFromTurso()" style="display: inline-flex; align-items: center; gap: 8px;">
+                <span class="sync-spinner" style="display: none; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite;"></span>
+                <span class="sync-text">Sync from Turso Cloud</span>
+            </button>
+        </div>
+
+        <!-- Sync Results -->
+        <div id="syncResults" style="display: none;">
+            <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">Sync Results</h3>
+            <div id="syncResultsContent"></div>
+        </div>
+    </div>
+
+    <!-- Database Records -->
+    <div class="status-section">
+        <h2 class="section-title">Database Records</h2>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Orders</div>
+                <div class="stat-value">{{ "{:,}".format(status.total_orders) }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Products</div>
+                <div class="stat-value">{{ "{:,}".format(status.total_products) }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Shops</div>
+                <div class="stat-value">{{ "{:,}".format(status.total_shops) }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Users</div>
+                <div class="stat-value">{{ "{:,}".format(status.total_users) }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Information -->
+    <div class="status-section">
+        <h2 class="section-title">System Information</h2>
+
+        <table class="info-table">
+            <tbody>
+                <tr>
+                    <td>Python Version</td>
+                    <td>{{ status.python_version }}</td>
+                </tr>
+                <tr>
+                    <td>Flask Version</td>
+                    <td>{{ status.flask_version }}</td>
+                </tr>
+                <tr>
+                    <td>SQLAlchemy Version</td>
+                    <td>{{ status.sqlalchemy_version }}</td>
+                </tr>
+                <tr>
+                    <td>Operating System</td>
+                    <td>{{ status.os_info }}</td>
+                </tr>
+                <tr>
+                    <td>Environment</td>
+                    <td>
+                        {% if status.volume_path != "Not Configured" %}
+                            <span class="status-badge badge-success">Production</span>
+                        {% else %}
+                            <span class="status-badge badge-warning">Development</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Environment Variables -->
+    <div class="status-section">
+        <h2 class="section-title">Environment Variables</h2>
+
+        <table class="info-table">
+            <tbody>
+                {% for key, value in status.env_vars.items() %}
+                <tr>
+                    <td>{{ key }}</td>
+                    <td>
+                        {% if value == "Not Set" %}
+                            <span class="status-badge badge-danger">{{ value }}</span>
+                        {% else %}
+                            {{ value }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Back Button -->
+    <div style="text-align: center;">
+        <a href="{{ url_for('dashboard') }}" class="back-button">Back to Dashboard</a>
+    </div>
+</div>
+
+<script>
+    // Password Verification
+    const VERIFY_PASSWORD = 'pdev';
+
+    // Check if already verified in this session
+    window.addEventListener('DOMContentLoaded', () => {
+        if (sessionStorage.getItem('systemStatusAccess') !== 'granted') {
+            const password = prompt('Enter password:');
+
+            if (password !== VERIFY_PASSWORD) {
+                if (password !== null) {
+                    alert('Incorrect password');
+                }
+                window.location.href = '{{ url_for("dashboard") }}';
+                return;
+            }
+
+            sessionStorage.setItem('systemStatusAccess', 'granted');
+        }
+    });
+
+    // Upload Database
+    function uploadDB(dbType) {
+        const fileInput = document.getElementById(`file-${dbType}`);
+        fileInput.click();
+    }
+
+    async function handleUpload(dbType) {
+        const fileInput = document.getElementById(`file-${dbType}`);
+        const file = fileInput.files[0];
+
+        if (!file) {
+            return;
+        }
+
+        if (!file.name.endsWith('.db')) {
+            alert('Please select a .db file only');
+            fileInput.value = '';
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to replace ${dbType}.db?\n\nThis action will create an automatic backup of the existing file.`)) {
+            fileInput.value = '';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('database', file);
+
+        const uploadBtn = document.getElementById(`upload-btn-${dbType}`);
+        const originalText = uploadBtn.textContent;
+        uploadBtn.textContent = 'Uploading...';
+        uploadBtn.disabled = true;
+
+        try {
+            const response = await fetch(`/api/database/upload/${dbType}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                alert(`Success: ${result.message}\n\nFile Size: ${result.size}${result.backup ? '\nBackup: ' + result.backup : ''}`);
+                location.reload();
+            } else {
+                alert(`Upload Failed:\n\n${result.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        } finally {
+            uploadBtn.textContent = originalText;
+            uploadBtn.disabled = false;
+            fileInput.value = '';
+        }
+    }
+
+    // Create Backup
+    async function createBackup(dbType) {
+        if (!confirm(`Create a backup of ${dbType}.db?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/database/backup/${dbType}`, {
+                method: 'POST'
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                alert(`Success: ${result.message}\n\nBackup File: ${result.backup_file}\nSize: ${result.size}`);
+            } else {
+                alert(`Backup Failed:\n\n${result.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    // Upload Turso Database
+    function uploadTursoDB(dbName) {
+        const fileInput = document.getElementById(`file-turso-${dbName}`);
+        fileInput.click();
+    }
+
+    async function handleTursoUpload(dbName) {
+        const fileInput = document.getElementById(`file-turso-${dbName}`);
+        const file = fileInput.files[0];
+
+        if (!file) {
+            return;
+        }
+
+        if (!file.name.endsWith('.db')) {
+            alert('Please select a .db file only');
+            fileInput.value = '';
+            return;
+        }
+
+        if (!confirm(`Upload and sync ${dbName} database to Turso Cloud?\n\nThis will:\n1. Replace local replica file\n2. Create automatic backup\n3. Sync to Turso cloud\n\nContinue?`)) {
+            fileInput.value = '';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('database', file);
+
+        const uploadBtn = document.getElementById(`upload-turso-btn-${dbName}`);
+        const originalText = uploadBtn.textContent;
+        uploadBtn.textContent = 'Uploading...';
+        uploadBtn.disabled = true;
+
+        try {
+            const response = await fetch(`/api/turso/upload/${dbName}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                let message = `Success: ${result.message}\n\nFile Size: ${result.size}`;
+                if (result.backup) {
+                    message += `\nBackup: ${result.backup}`;
+                }
+                if (result.synced_to_turso) {
+                    message += '\n\n✓ Synced to Turso Cloud successfully!';
+                } else if (result.sync_error) {
+                    message += `\n\n⚠ Warning: Failed to sync to Turso Cloud\nError: ${result.sync_error}`;
+                }
+                alert(message);
+                location.reload();
+            } else {
+                alert(`Upload Failed:\n\n${result.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        } finally {
+            uploadBtn.textContent = originalText;
+            uploadBtn.disabled = false;
+            fileInput.value = '';
+        }
+    }
+
+    // Sync from Turso Cloud
+    async function syncFromTurso() {
+        const button = document.getElementById('syncTursoBtn');
+        const spinner = button.querySelector('.sync-spinner');
+        const buttonText = button.querySelector('.sync-text');
+        const resultsSection = document.getElementById('syncResults');
+        const resultsContent = document.getElementById('syncResultsContent');
+
+        // Show loading state
+        button.disabled = true;
+        spinner.style.display = 'inline-block';
+        buttonText.textContent = 'Syncing...';
+        resultsSection.style.display = 'none';
+        resultsContent.innerHTML = '';
+
+        try {
+            const response = await fetch('/admin/sync-turso', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            // Show results section
+            resultsSection.style.display = 'block';
+
+            if (result.success) {
+                // Success - show database results
+                const databases = result.databases;
+                let html = '';
+
+                for (const [dbName, dbData] of Object.entries(databases)) {
+                    const dbDisplayNames = {
+                        'data': 'Data Database',
+                        'price': 'Price Database',
+                        'supplier': 'Supplier Database'
+                    };
+
+                    const borderColor = dbData.status === 'success' ? '#2D3748' : '#dc3545';
+                    const bgColor = dbData.status === 'success' ? '#E6F4EA' : '#F8D7DA';
+                    const textColor = dbData.status === 'success' ? '#1E7E34' : '#721C24';
+
+                    html += `
+                        <div style="border: 1px solid var(--border-color); border-left: 4px solid ${borderColor}; border-radius: 6px; padding: 16px; margin-bottom: 12px; background: var(--bg-secondary);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <strong style="font-size: 1rem;">${dbDisplayNames[dbName] || dbName}</strong>
+                                <span style="background: ${bgColor}; color: ${textColor}; padding: 4px 12px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">
+                                    ${dbData.status === 'success' ? '✓ Success' : '✗ Failed'}
+                                </span>
+                            </div>
+                    `;
+
+                    if (dbData.status === 'success') {
+                        html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">';
+
+                        if (dbData.products !== undefined) {
+                            html += `
+                                <div style="text-align: center; padding: 10px; background: var(--bg-primary); border-radius: 4px;">
+                                    <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 4px;">PRODUCTS</div>
+                                    <div style="font-size: 1.3rem; font-weight: 600;">${dbData.products.toLocaleString()}</div>
+                                </div>
+                            `;
+                        }
+                        if (dbData.pricings !== undefined) {
+                            html += `
+                                <div style="text-align: center; padding: 10px; background: var(--bg-primary); border-radius: 4px;">
+                                    <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 4px;">PRICINGS</div>
+                                    <div style="font-size: 1.3rem; font-weight: 600;">${dbData.pricings.toLocaleString()}</div>
+                                </div>
+                            `;
+                        }
+                        if (dbData.supplier_skus !== undefined) {
+                            html += `
+                                <div style="text-align: center; padding: 10px; background: var(--bg-primary); border-radius: 4px;">
+                                    <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 4px;">SUPPLIER SKUs</div>
+                                    <div style="font-size: 1.3rem; font-weight: 600;">${dbData.supplier_skus.toLocaleString()}</div>
+                                </div>
+                            `;
+                        }
+
+                        html += '</div>';
+                    } else if (dbData.error) {
+                        html += `<div style="color: #721C24; background: #F8D7DA; padding: 10px; border-radius: 4px; font-size: 0.85rem; margin-top: 8px;">${dbData.error}</div>`;
+                    }
+
+                    html += '</div>';
+                }
+
+                resultsContent.innerHTML = html;
+
+                // Show success message
+                alert('✓ Sync completed successfully!\n\nAll databases have been synced from Turso Cloud.');
+
+            } else {
+                // Error
+                let errorHtml = `
+                    <div class="alert-box warning" style="border-left: 4px solid #f39c12;">
+                        <div class="alert-icon">⚠️</div>
+                        <div class="alert-content">
+                            <strong>Sync Failed</strong>
+                            <p>${result.error || 'Unknown error occurred'}</p>
+                `;
+
+                if (result.errors && result.errors.length > 0) {
+                    errorHtml += '<ul style="margin-left: 20px; margin-top: 8px;">';
+                    result.errors.forEach(err => {
+                        errorHtml += `<li>${err}</li>`;
+                    });
+                    errorHtml += '</ul>';
+                }
+
+                errorHtml += '</div></div>';
+                resultsContent.innerHTML = errorHtml;
+            }
+
+        } catch (error) {
+            resultsSection.style.display = 'block';
+            resultsContent.innerHTML = `
+                <div class="alert-box warning" style="border-left: 4px solid #dc3545;">
+                    <div class="alert-icon">⚠️</div>
+                    <div class="alert-content">
+                        <strong>Connection Error</strong>
+                        <p>Failed to connect to server: ${error.message}</p>
+                    </div>
+                </div>
+            `;
+        } finally {
+            // Reset button state
+            button.disabled = false;
+            spinner.style.display = 'none';
+            buttonText.textContent = 'Sync from Turso Cloud';
+        }
+    }
+</script>
+
+{% endblock %}
