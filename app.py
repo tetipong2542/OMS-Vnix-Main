@@ -1406,7 +1406,7 @@ def create_app():
                         print(f"[DEBUG] Data DB tables created")
 
                 print(f"[DEBUG] Syncing price database...")
-                with db.get_engine(bind_key="price").connect() as conn:
+                with db.engines["price"].connect() as conn:
                     try:
                         result = conn.execute(db.text("SELECT COUNT(*) FROM sku_pricing"))
                         count = result.scalar()
@@ -1417,7 +1417,7 @@ def create_app():
                         print(f"[DEBUG] Price DB tables created")
 
                 print(f"[DEBUG] Syncing supplier database...")
-                with db.get_engine(bind_key="supplier").connect() as conn:
+                with db.engines["supplier"].connect() as conn:
                     try:
                         result = conn.execute(db.text("SELECT COUNT(*) FROM supplier_sku_master"))
                         count = result.scalar()
