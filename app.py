@@ -17230,27 +17230,25 @@ def create_app():
     # =============================================================================
     # Manual Sync Endpoint - Force sync from Turso cloud to local embedded replica
     # =============================================================================
-    @app.route("/admin/sync-turso", methods=["GET", "POST"])
+    @app.route("/admin/sync-turso", methods=["POST"])
     @login_required
     def admin_sync_turso():
         """
-        Manually force sync data from Turso cloud to local embedded replica files.
+        API endpoint to manually force sync data from Turso cloud to local embedded replica files.
 
         Use this when:
         - You edited data directly in Turso Dashboard
         - Data on web app is outdated
         - Need to refresh local cache
+
+        Called from /system-status page via JavaScript
         """
         # Check if user is admin
         cu = current_user()
         if cu.role != "admin":
-            flash("ต้องเป็นผู้ดูแลระบบเท่านั้น", "danger")
-            return redirect(url_for("dashboard"))
+            return jsonify({"success": False, "error": "Admin access required"}), 403
 
-        if request.method == "GET":
-            return render_template("admin_sync_turso.html")
-
-        # POST - perform sync
+        # Perform sync
         results = {"success": False, "databases": {}, "errors": []}
 
         try:

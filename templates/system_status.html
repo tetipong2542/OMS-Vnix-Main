@@ -330,6 +330,13 @@
         text-decoration: none;
     }
 
+    /* Spinner Animation */
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
         .info-item {
@@ -458,6 +465,35 @@
                class="db-button btn-download-all">
                 Download All Databases (ZIP)
             </a>
+        </div>
+    </div>
+
+    <!-- Turso Cloud Sync -->
+    <div class="status-section">
+        <h2 class="section-title">🔄 Turso Cloud Sync</h2>
+
+        <div class="alert-box" style="border-left: 4px solid #3498db; margin-bottom: 20px;">
+            <div class="alert-icon">ℹ️</div>
+            <div class="alert-content">
+                <strong>Manual Sync from Turso Cloud</strong>
+                <p style="margin-bottom: 8px;">ใช้เมื่อคุณแก้ไขข้อมูลโดยตรงใน Turso Dashboard (ผ่าน CLI หรือ Web UI) และต้องการดึงข้อมูลล่าสุดมาที่หน้าเว็บ</p>
+                <p style="margin-bottom: 0; font-size: 0.85rem;">
+                    <strong>หมายเหตุ:</strong> การแก้ไขข้อมูลผ่านหน้าเว็บจะ sync ไป Turso อัตโนมัติ ไม่ต้องกดปุ่มนี้
+                </p>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px;">
+            <button id="syncTursoBtn" class="db-button btn-download-all" onclick="syncFromTurso()" style="display: inline-flex; align-items: center; gap: 8px;">
+                <span class="sync-spinner" style="display: none; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite;"></span>
+                <span class="sync-text">Sync from Turso Cloud</span>
+            </button>
+        </div>
+
+        <!-- Sync Results -->
+        <div id="syncResults" style="display: none;">
+            <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);">Sync Results</h3>
+            <div id="syncResultsContent"></div>
         </div>
     </div>
 
@@ -646,6 +682,142 @@
             }
         } catch (error) {
             alert(`Error: ${error.message}`);
+        }
+    }
+
+    // Sync from Turso Cloud
+    async function syncFromTurso() {
+        const button = document.getElementById('syncTursoBtn');
+        const spinner = button.querySelector('.sync-spinner');
+        const buttonText = button.querySelector('.sync-text');
+        const resultsSection = document.getElementById('syncResults');
+        const resultsContent = document.getElementById('syncResultsContent');
+
+        // Show loading state
+        button.disabled = true;
+        spinner.style.display = 'inline-block';
+        buttonText.textContent = 'Syncing...';
+        resultsSection.style.display = 'none';
+        resultsContent.innerHTML = '';
+
+        try {
+            const response = await fetch('/admin/sync-turso', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            // Show results section
+            resultsSection.style.display = 'block';
+
+            if (result.success) {
+                // Success - show database results
+                const databases = result.databases;
+                let html = '';
+
+                for (const [dbName, dbData] of Object.entries(databases)) {
+                    const dbDisplayNames = {
+                        'data': 'Data Database',
+                        'price': 'Price Database',
+                        'supplier': 'Supplier Database'
+                    };
+
+                    const borderColor = dbData.status === 'success' ? '#2D3748' : '#dc3545';
+                    const bgColor = dbData.status === 'success' ? '#E6F4EA' : '#F8D7DA';
+                    const textColor = dbData.status === 'success' ? '#1E7E34' : '#721C24';
+
+                    html += `
+                        <div style="border: 1px solid var(--border-color); border-left: 4px solid ${borderColor}; border-radius: 6px; padding: 16px; margin-bottom: 12px; background: var(--bg-secondary);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <strong style="font-size: 1rem;">${dbDisplayNames[dbName] || dbName}</strong>
+                                <span style="background: ${bgColor}; color: ${textColor}; padding: 4px 12px; border-radius: 4px; font-size: 0.8rem; font-weight: 500;">
+                                    ${dbData.status === 'success' ? '✓ Success' : '✗ Failed'}
+                                </span>
+                            </div>
+                    `;
+
+                    if (dbData.status === 'success') {
+                        html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">';
+
+                        if (dbData.products !== undefined) {
+                            html += `
+                                <div style="text-align: center; padding: 10px; background: var(--bg-primary); border-radius: 4px;">
+                                    <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 4px;">PRODUCTS</div>
+                                    <div style="font-size: 1.3rem; font-weight: 600;">${dbData.products.toLocaleString()}</div>
+                                </div>
+                            `;
+                        }
+                        if (dbData.pricings !== undefined) {
+                            html += `
+                                <div style="text-align: center; padding: 10px; background: var(--bg-primary); border-radius: 4px;">
+                                    <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 4px;">PRICINGS</div>
+                                    <div style="font-size: 1.3rem; font-weight: 600;">${dbData.pricings.toLocaleString()}</div>
+                                </div>
+                            `;
+                        }
+                        if (dbData.supplier_skus !== undefined) {
+                            html += `
+                                <div style="text-align: center; padding: 10px; background: var(--bg-primary); border-radius: 4px;">
+                                    <div style="color: var(--text-secondary); font-size: 0.75rem; margin-bottom: 4px;">SUPPLIER SKUs</div>
+                                    <div style="font-size: 1.3rem; font-weight: 600;">${dbData.supplier_skus.toLocaleString()}</div>
+                                </div>
+                            `;
+                        }
+
+                        html += '</div>';
+                    } else if (dbData.error) {
+                        html += `<div style="color: #721C24; background: #F8D7DA; padding: 10px; border-radius: 4px; font-size: 0.85rem; margin-top: 8px;">${dbData.error}</div>`;
+                    }
+
+                    html += '</div>';
+                }
+
+                resultsContent.innerHTML = html;
+
+                // Show success message
+                alert('✓ Sync completed successfully!\n\nAll databases have been synced from Turso Cloud.');
+
+            } else {
+                // Error
+                let errorHtml = `
+                    <div class="alert-box warning" style="border-left: 4px solid #f39c12;">
+                        <div class="alert-icon">⚠️</div>
+                        <div class="alert-content">
+                            <strong>Sync Failed</strong>
+                            <p>${result.error || 'Unknown error occurred'}</p>
+                `;
+
+                if (result.errors && result.errors.length > 0) {
+                    errorHtml += '<ul style="margin-left: 20px; margin-top: 8px;">';
+                    result.errors.forEach(err => {
+                        errorHtml += `<li>${err}</li>`;
+                    });
+                    errorHtml += '</ul>';
+                }
+
+                errorHtml += '</div></div>';
+                resultsContent.innerHTML = errorHtml;
+            }
+
+        } catch (error) {
+            resultsSection.style.display = 'block';
+            resultsContent.innerHTML = `
+                <div class="alert-box warning" style="border-left: 4px solid #dc3545;">
+                    <div class="alert-icon">⚠️</div>
+                    <div class="alert-content">
+                        <strong>Connection Error</strong>
+                        <p>Failed to connect to server: ${error.message}</p>
+                    </div>
+                </div>
+            `;
+        } finally {
+            // Reset button state
+            button.disabled = false;
+            spinner.style.display = 'none';
+            buttonText.textContent = 'Sync from Turso Cloud';
         }
     }
 </script>
