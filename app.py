@@ -17227,6 +17227,101 @@ def create_app():
         
         return render_template("clear_confirm.html", stats=stats)
 
+    # =============================================================================
+    # Manual Sync Endpoint - Force sync from Turso cloud to local embedded replica
+    # =============================================================================
+    @app.route("/admin/sync-turso", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def admin_sync_turso():
+        """
+        Manually force sync data from Turso cloud to local embedded replica files.
+
+        Use this when:
+        - You edited data directly in Turso Dashboard
+        - Data on web app is outdated
+        - Need to refresh local cache
+        """
+        if request.method == "GET":
+            return render_template("admin_sync_turso.html")
+
+        # POST - perform sync
+        results = {"success": False, "databases": {}, "errors": []}
+
+        try:
+            import libsql_experimental as libsql
+            import os
+
+            # Get Turso config from environment
+            data_url = os.environ.get("DATA_DB_URL")
+            data_token = os.environ.get("DATA_DB_AUTH_TOKEN")
+            data_local = os.environ.get("DATA_DB_LOCAL")
+
+            price_url = os.environ.get("PRICE_DB_URL")
+            price_token = os.environ.get("PRICE_DB_AUTH_TOKEN")
+            price_local = os.environ.get("PRICE_DB_LOCAL")
+
+            supplier_url = os.environ.get("SUPPLIER_DB_URL")
+            supplier_token = os.environ.get("SUPPLIER_DB_AUTH_TOKEN")
+            supplier_local = os.environ.get("SUPPLIER_DB_LOCAL")
+
+            if not all([data_url, data_token, price_url, price_token, supplier_url, supplier_token]):
+                results["errors"].append("Turso configuration not found in environment variables")
+                return jsonify(results), 500
+
+            # Determine local file paths
+            data_path = data_local if data_local else "/tmp/data-tetipong2542.db"
+            price_path = price_local if price_local else "/tmp/price-tetipong2542.db"
+            supplier_path = supplier_local if supplier_local else "/tmp/supplier-stock-tetipong2542.db"
+
+            # Sync Data DB
+            try:
+                conn_data = libsql.connect(data_path, sync_url=data_url, auth_token=data_token)
+                conn_data.sync()
+                cursor = conn_data.cursor()
+                cursor.execute("SELECT COUNT(*) FROM products")
+                count = cursor.fetchone()[0]
+                conn_data.close()
+                results["databases"]["data"] = {"status": "success", "products": count}
+            except Exception as e:
+                results["databases"]["data"] = {"status": "error", "error": str(e)}
+                results["errors"].append(f"Data DB sync failed: {e}")
+
+            # Sync Price DB
+            try:
+                conn_price = libsql.connect(price_path, sync_url=price_url, auth_token=price_token)
+                conn_price.sync()
+                cursor = conn_price.cursor()
+                cursor.execute("SELECT COUNT(*) FROM sku_pricing")
+                count = cursor.fetchone()[0]
+                conn_price.close()
+                results["databases"]["price"] = {"status": "success", "sku_pricings": count}
+            except Exception as e:
+                results["databases"]["price"] = {"status": "error", "error": str(e)}
+                results["errors"].append(f"Price DB sync failed: {e}")
+
+            # Sync Supplier DB
+            try:
+                conn_supplier = libsql.connect(supplier_path, sync_url=supplier_url, auth_token=supplier_token)
+                conn_supplier.sync()
+                cursor = conn_supplier.cursor()
+                cursor.execute("SELECT COUNT(*) FROM supplier_sku_master")
+                count = cursor.fetchone()[0]
+                conn_supplier.close()
+                results["databases"]["supplier"] = {"status": "success", "supplier_skus": count}
+            except Exception as e:
+                results["databases"]["supplier"] = {"status": "error", "error": str(e)}
+                results["errors"].append(f"Supplier DB sync failed: {e}")
+
+            # Check overall success
+            results["success"] = len(results["errors"]) == 0
+
+            return jsonify(results)
+
+        except Exception as e:
+            results["errors"].append(f"Sync failed: {str(e)}")
+            return jsonify(results), 500
+
     return app
 
 

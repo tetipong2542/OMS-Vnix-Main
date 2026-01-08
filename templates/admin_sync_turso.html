@@ -1,0 +1,502 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+    /* Clean & Professional Minimalist Theme */
+    :root {
+        --bg-primary: #FFFFFF;
+        --bg-secondary: #F8F9FA;
+        --text-primary: #1A1A1A;
+        --text-secondary: #6C757D;
+        --border-color: #E5E5E5;
+        --accent-color: #4A4A4A;
+        --success-color: #2D3748;
+        --warning-color: #718096;
+        --danger-color: #A0AEC0;
+    }
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    .sync-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background: var(--bg-secondary);
+        min-height: 100vh;
+    }
+
+    /* Header */
+    .sync-header {
+        margin-bottom: 40px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .sync-header h1 {
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+    }
+
+    .sync-header p {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        font-weight: 400;
+        line-height: 1.6;
+    }
+
+    /* Alert Box */
+    .alert-box {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px 24px;
+        margin-bottom: 32px;
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .alert-box.info {
+        border-left: 4px solid #3498db;
+    }
+
+    .alert-box.success {
+        border-left: 4px solid var(--success-color);
+    }
+
+    .alert-box.warning {
+        border-left: 4px solid var(--warning-color);
+    }
+
+    .alert-icon {
+        font-size: 1.25rem;
+        color: var(--text-primary);
+        font-weight: 600;
+        min-width: 24px;
+    }
+
+    .alert-content strong {
+        display: block;
+        color: var(--text-primary);
+        font-weight: 600;
+        margin-bottom: 4px;
+    }
+
+    .alert-content p {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        margin-bottom: 8px;
+    }
+
+    .alert-content ul {
+        margin-left: 20px;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+
+    /* Card Sections */
+    .sync-section {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 28px;
+        margin-bottom: 24px;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    /* Sync Button */
+    .sync-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 32px;
+        background: #1A1A1A;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 1rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .sync-button:hover:not(:disabled) {
+        background: #2D3748;
+        transform: translateY(-1px);
+    }
+
+    .sync-button:disabled {
+        background: #CBD5E0;
+        cursor: not-allowed;
+    }
+
+    .sync-button .spinner {
+        display: none;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+    }
+
+    .sync-button.loading .spinner {
+        display: inline-block;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Results Section */
+    .results-section {
+        display: none;
+        margin-top: 24px;
+    }
+
+    .results-section.visible {
+        display: block;
+    }
+
+    .db-result-card {
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 20px;
+        margin-bottom: 16px;
+        background: var(--bg-secondary);
+    }
+
+    .db-result-card.success {
+        border-left: 4px solid #2D3748;
+    }
+
+    .db-result-card.error {
+        border-left: 4px solid #dc3545;
+    }
+
+    .db-result-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .db-result-header h3 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .badge-success {
+        background: #E6F4EA;
+        color: #1E7E34;
+    }
+
+    .badge-error {
+        background: #F8D7DA;
+        color: #721C24;
+    }
+
+    .db-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+        margin-top: 12px;
+    }
+
+    .stat-item {
+        padding: 12px;
+        background: var(--bg-primary);
+        border-radius: 4px;
+        text-align: center;
+    }
+
+    .stat-label {
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+    }
+
+    .stat-value {
+        color: var(--text-primary);
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+
+    /* Error Message */
+    .error-message {
+        color: #721C24;
+        background: #F8D7DA;
+        padding: 12px 16px;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        margin-top: 12px;
+    }
+
+    /* Back Button */
+    .back-button {
+        display: inline-block;
+        margin-top: 32px;
+        padding: 12px 32px;
+        background: var(--text-primary);
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 0.9rem;
+        transition: background 0.2s ease;
+    }
+
+    .back-button:hover {
+        background: var(--accent-color);
+        color: white;
+        text-decoration: none;
+    }
+
+    /* Info Table */
+    .info-table {
+        width: 100%;
+        margin-top: 12px;
+        font-size: 0.9rem;
+    }
+
+    .info-table td {
+        padding: 8px 0;
+        color: var(--text-secondary);
+    }
+
+    .info-table td:first-child {
+        font-weight: 500;
+        width: 120px;
+    }
+
+    .info-table td:last-child {
+        color: var(--text-primary);
+        font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .sync-container {
+            padding: 20px 16px;
+        }
+
+        .sync-header h1 {
+            font-size: 1.5rem;
+        }
+
+        .db-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+</style>
+
+<div class="sync-container">
+    <!-- Header -->
+    <div class="sync-header">
+        <h1>🔄 Sync from Turso Cloud</h1>
+        <p>Manually force sync data from Turso cloud databases to local embedded replica files</p>
+    </div>
+
+    <!-- Info Alert -->
+    <div class="alert-box info">
+        <div class="alert-icon">ℹ️</div>
+        <div class="alert-content">
+            <strong>When to Use This</strong>
+            <p>Use this sync function when:</p>
+            <ul>
+                <li>You edited data directly in Turso Dashboard (via Turso CLI or Web UI)</li>
+                <li>Changes made elsewhere aren't showing up in the web app</li>
+                <li>You want to ensure you have the latest data from the cloud</li>
+            </ul>
+            <p style="margin-top: 12px;">
+                <strong>Note:</strong> Normal write operations (editing data through this web app) automatically sync to Turso - you don't need manual sync for those.
+            </p>
+        </div>
+    </div>
+
+    <!-- Sync Action -->
+    <div class="sync-section">
+        <h2 class="section-title">Manual Sync</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6;">
+            This will download the latest data from all three Turso databases (Data, Price, Supplier) to the local embedded replica files.
+            The process may take 10-30 seconds depending on database size.
+        </p>
+
+        <button id="syncButton" class="sync-button" onclick="performSync()">
+            <span class="spinner"></span>
+            <span class="button-text">Sync from Turso Cloud</span>
+        </button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="sync-section results-section">
+        <h2 class="section-title">Sync Results</h2>
+        <div id="resultsContainer"></div>
+    </div>
+
+    <!-- Back Button -->
+    <div style="text-align: center;">
+        <a href="{{ url_for('dashboard') }}" class="back-button">Back to Dashboard</a>
+    </div>
+</div>
+
+<script>
+    async function performSync() {
+        const button = document.getElementById('syncButton');
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsContainer = document.getElementById('resultsContainer');
+
+        // Disable button and show loading state
+        button.disabled = true;
+        button.classList.add('loading');
+        button.querySelector('.button-text').textContent = 'Syncing...';
+
+        // Hide previous results
+        resultsSection.classList.remove('visible');
+        resultsContainer.innerHTML = '';
+
+        try {
+            const response = await fetch('/admin/sync-turso', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            // Show results
+            resultsSection.classList.add('visible');
+
+            if (result.success) {
+                // Success - show all database results
+                const databases = result.databases;
+
+                for (const [dbName, dbData] of Object.entries(databases)) {
+                    const card = createResultCard(dbName, dbData);
+                    resultsContainer.appendChild(card);
+                }
+
+            } else {
+                // General error
+                resultsContainer.innerHTML = `
+                    <div class="alert-box warning">
+                        <div class="alert-icon">⚠️</div>
+                        <div class="alert-content">
+                            <strong>Sync Failed</strong>
+                            <p>${result.error || 'Unknown error occurred'}</p>
+                            ${result.errors && result.errors.length > 0 ?
+                                '<ul>' + result.errors.map(e => `<li>${e}</li>`).join('') + '</ul>' : ''}
+                        </div>
+                    </div>
+                `;
+            }
+
+        } catch (error) {
+            resultsSection.classList.add('visible');
+            resultsContainer.innerHTML = `
+                <div class="alert-box warning">
+                    <div class="alert-icon">⚠️</div>
+                    <div class="alert-content">
+                        <strong>Connection Error</strong>
+                        <p>Failed to connect to the server: ${error.message}</p>
+                    </div>
+                </div>
+            `;
+        } finally {
+            // Re-enable button
+            button.disabled = false;
+            button.classList.remove('loading');
+            button.querySelector('.button-text').textContent = 'Sync from Turso Cloud';
+        }
+    }
+
+    function createResultCard(dbName, dbData) {
+        const card = document.createElement('div');
+        card.className = `db-result-card ${dbData.status === 'success' ? 'success' : 'error'}`;
+
+        const dbDisplayNames = {
+            'data': 'Data Database (Main)',
+            'price': 'Price Database (SKU Pricing)',
+            'supplier': 'Supplier Database (Stock)'
+        };
+
+        let statsHTML = '';
+        if (dbData.status === 'success') {
+            const stats = [];
+            if (dbData.products !== undefined) {
+                stats.push({ label: 'Products', value: dbData.products.toLocaleString() });
+            }
+            if (dbData.pricings !== undefined) {
+                stats.push({ label: 'SKU Pricings', value: dbData.pricings.toLocaleString() });
+            }
+            if (dbData.supplier_skus !== undefined) {
+                stats.push({ label: 'Supplier SKUs', value: dbData.supplier_skus.toLocaleString() });
+            }
+
+            if (stats.length > 0) {
+                statsHTML = '<div class="db-stats">' +
+                    stats.map(s => `
+                        <div class="stat-item">
+                            <div class="stat-label">${s.label}</div>
+                            <div class="stat-value">${s.value}</div>
+                        </div>
+                    `).join('') +
+                    '</div>';
+            }
+        }
+
+        card.innerHTML = `
+            <div class="db-result-header">
+                <h3>${dbDisplayNames[dbName] || dbName}</h3>
+                <span class="status-badge ${dbData.status === 'success' ? 'badge-success' : 'badge-error'}">
+                    ${dbData.status === 'success' ? '✓ Success' : '✗ Failed'}
+                </span>
+            </div>
+            ${statsHTML}
+            ${dbData.error ? `<div class="error-message">${dbData.error}</div>` : ''}
+        `;
+
+        return card;
+    }
+
+    // Password Verification (if needed)
+    window.addEventListener('DOMContentLoaded', () => {
+        // Add password protection if needed (similar to system_status.html)
+        // For now, this is protected by @admin_required decorator
+    });
+</script>
+
+{% endblock %}
