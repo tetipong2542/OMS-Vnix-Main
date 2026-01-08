@@ -1339,30 +1339,88 @@ def create_app():
     # =========[ /NEW ]=========
 
     with app.app_context():
-        # Create tables for each database bind separately with error handling
-        try:
-            print(f"[DEBUG] Creating main database tables...")
-            db.create_all()  # Main database (data.db)
-            print(f"[DEBUG] Main database tables created successfully")
-        except Exception as e:
-            print(f"[ERROR] Failed to create main database tables: {e}")
-            raise
+        # Check if we're using Turso - if so, sync instead of create
+        using_turso = bool(data_url and data_token and price_url and price_token and supplier_url and supplier_token)
 
-        try:
-            print(f"[DEBUG] Creating price database tables...")
-            db.create_all(bind_key="price")  # Price database (price.db)
-            print(f"[DEBUG] Price database tables created successfully")
-        except Exception as e:
-            print(f"[ERROR] Failed to create price database tables: {e}")
-            raise
+        if using_turso:
+            # For Turso embedded replica: sync data from cloud instead of creating empty tables
+            print(f"[INFO] 🔄 Syncing data from Turso cloud databases...")
 
-        try:
-            print(f"[DEBUG] Creating supplier database tables...")
-            db.create_all(bind_key="supplier")  # Supplier database (supplier_stock.db)
-            print(f"[DEBUG] Supplier database tables created successfully")
-        except Exception as e:
-            print(f"[ERROR] Failed to create supplier database tables: {e}")
-            raise
+            try:
+                # Force sync by executing a simple query on each database
+                # This triggers libsql to download schema and data from Turso
+
+                print(f"[DEBUG] Syncing main database (data)...")
+                with db.engine.connect() as conn:
+                    # Try to query existing tables to trigger sync
+                    try:
+                        result = conn.execute(db.text("SELECT COUNT(*) FROM products"))
+                        count = result.scalar()
+                        print(f"[DEBUG] ✅ Data DB synced: {count} products found")
+                    except Exception as e:
+                        # Table doesn't exist yet, create it
+                        print(f"[DEBUG] Data DB is empty, creating tables...")
+                        db.create_all()
+                        print(f"[DEBUG] Data DB tables created")
+
+                print(f"[DEBUG] Syncing price database...")
+                with db.get_engine(bind_key="price").connect() as conn:
+                    try:
+                        result = conn.execute(db.text("SELECT COUNT(*) FROM sku_pricing"))
+                        count = result.scalar()
+                        print(f"[DEBUG] ✅ Price DB synced: {count} SKU pricings found")
+                    except Exception as e:
+                        print(f"[DEBUG] Price DB is empty, creating tables...")
+                        db.create_all(bind_key="price")
+                        print(f"[DEBUG] Price DB tables created")
+
+                print(f"[DEBUG] Syncing supplier database...")
+                with db.get_engine(bind_key="supplier").connect() as conn:
+                    try:
+                        result = conn.execute(db.text("SELECT COUNT(*) FROM supplier_sku_master"))
+                        count = result.scalar()
+                        print(f"[DEBUG] ✅ Supplier DB synced: {count} supplier SKUs found")
+                    except Exception as e:
+                        print(f"[DEBUG] Supplier DB is empty, creating tables...")
+                        db.create_all(bind_key="supplier")
+                        print(f"[DEBUG] Supplier DB tables created")
+
+                print(f"[INFO] ✅ All databases synced successfully!")
+
+            except Exception as e:
+                print(f"[ERROR] Failed to sync Turso databases: {e}")
+                import traceback
+                traceback.print_exc()
+                # Fallback to create_all
+                print(f"[DEBUG] Falling back to create_all()...")
+                db.create_all()
+                db.create_all(bind_key="price")
+                db.create_all(bind_key="supplier")
+        else:
+            # Local SQLite mode: create tables normally
+            try:
+                print(f"[DEBUG] Creating main database tables...")
+                db.create_all()  # Main database (data.db)
+                print(f"[DEBUG] Main database tables created successfully")
+            except Exception as e:
+                print(f"[ERROR] Failed to create main database tables: {e}")
+                raise
+
+            try:
+                print(f"[DEBUG] Creating price database tables...")
+                db.create_all(bind_key="price")  # Price database (price.db)
+                print(f"[DEBUG] Price database tables created successfully")
+            except Exception as e:
+                print(f"[ERROR] Failed to create price database tables: {e}")
+                raise
+
+            try:
+                print(f"[DEBUG] Creating supplier database tables...")
+                db.create_all(bind_key="supplier")  # Supplier database (supplier_stock.db)
+                print(f"[DEBUG] Supplier database tables created successfully")
+            except Exception as e:
+                print(f"[ERROR] Failed to create supplier database tables: {e}")
+                raise
 
         # ---- Price DB auto-migrate (SQLite): ensure new columns exist ----
         def _ensure_price_sku_pricing_columns():
