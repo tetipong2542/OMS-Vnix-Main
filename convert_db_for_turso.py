@@ -52,7 +52,12 @@ def convert_database_for_turso(input_path, output_path):
         print("🔍 Step 1: Checking database integrity...")
         print("-" * 70)
 
-        conn = sqlite3.connect(output_path)
+        # Set timeout to avoid lock issues
+        conn = sqlite3.connect(output_path, timeout=30.0)
+
+        # Enable immediate mode to avoid lock issues
+        conn.execute("PRAGMA locking_mode=EXCLUSIVE")
+
         cursor = conn.cursor()
 
         cursor.execute("PRAGMA integrity_check")
