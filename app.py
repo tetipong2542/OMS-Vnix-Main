@@ -921,37 +921,41 @@ def create_app():
 
         def build_turso_uri(sync_url, auth_token, local_file):
             """
-            Build SQLAlchemy URI for Turso database
-            - If local_file is set: Use embedded replica mode (faster reads, needs Volume)
-            - If local_file is empty: Use remote-only mode (no Volume needed)
+            Build SQLAlchemy URI for Turso database with embedded replica
+
+            Note: sqlalchemy-libsql REQUIRES embedded replica mode (cannot do remote-only)
+
+            - If local_file is set: Use that path (e.g., /data/data.db for Volume)
+            - If local_file is NOT set: Use in-container temp path (e.g., /tmp/data.db)
             """
             # Ensure sync_url uses libsql:// protocol
             if not sync_url.startswith("libsql://"):
                 if sync_url.startswith("https://"):
                     sync_url = sync_url.replace("https://", "libsql://", 1)
 
-            # Check if local_file is set and not empty
-            if local_file and local_file.strip():
-                # EMBEDDED REPLICA MODE (with local file cache)
+            # If local_file is not set, use in-container temp path (no Volume needed)
+            if not local_file or not local_file.strip():
+                # Use /tmp for in-container storage (will be synced on startup, lost on restart)
+                db_name = sync_url.split('/')[-1].split('.')[0]  # Extract db name from URL
+                local_file = f"/tmp/{db_name}.db"
+            else:
                 # Clean up file: prefix if present
                 if local_file.startswith("file:"):
                     local_file = local_file[5:]
-                return f"sqlite+libsql:///{local_file}?sync_url={sync_url}&authToken={auth_token}"
-            else:
-                # REMOTE-ONLY MODE (no local file, direct connection to Turso)
-                # Remove libsql:// prefix for remote-only connection string
-                host = sync_url.replace("libsql://", "")
-                return f"sqlite+libsql://{host}?authToken={auth_token}"
+
+            # ALWAYS use embedded replica mode (required by sqlalchemy-libsql)
+            return f"sqlite+libsql:///{local_file}?sync_url={sync_url}&authToken={auth_token}"
 
         # Detect mode based on whether local files are configured
-        use_embedded = bool(data_local and data_local.strip())
+        use_volume = bool(data_local and data_local.strip())
 
-        if use_embedded:
-            print("[INFO] 🚀 Using 3 separate Turso databases with EMBEDDED REPLICAS")
-            print("[INFO] 📁 Local files will be synced to Railway Volume")
+        if use_volume:
+            print("[INFO] 🚀 Using 3 separate Turso databases with EMBEDDED REPLICAS + VOLUME")
+            print("[INFO] 💾 Local files persisted in Railway Volume (fast restarts)")
         else:
-            print("[INFO] 🚀 Using 3 separate Turso databases in REMOTE-ONLY mode")
-            print("[INFO] ☁️  No local files - all queries go directly to Turso cloud")
+            print("[INFO] 🚀 Using 3 separate Turso databases with EMBEDDED REPLICAS (In-Container)")
+            print("[INFO] 📦 Local files in container /tmp (will re-sync on restart)")
+            print("[INFO] ⚠️  No Volume - data syncs from Turso on each startup (~10-30s)")
 
         # Build URIs for each database
         data_uri = build_turso_uri(data_url, data_token, data_local)
@@ -968,16 +972,22 @@ def create_app():
             "supplier": supplier_uri
         }
 
-        if use_embedded:
-            print(f"[DEBUG] ✅ Data DB: {data_url} → {data_local}")
-            print(f"[DEBUG] ✅ Price DB: {price_url} → {price_local}")
-            print(f"[DEBUG] ✅ Supplier DB: {supplier_url} → {supplier_local}")
-            print(f"[DEBUG] Embedded replica files will sync automatically")
+        # Show the actual paths being used
+        data_path = data_local if data_local else "/tmp/data-tetipong2542.db"
+        price_path = price_local if price_local else "/tmp/price-tetipong2542.db"
+        supplier_path = supplier_local if supplier_local else "/tmp/supplier-stock-tetipong2542.db"
+
+        print(f"[DEBUG] ✅ Data DB: {data_url}")
+        print(f"[DEBUG]    → Local file: {data_path}")
+        print(f"[DEBUG] ✅ Price DB: {price_url}")
+        print(f"[DEBUG]    → Local file: {price_path}")
+        print(f"[DEBUG] ✅ Supplier DB: {supplier_url}")
+        print(f"[DEBUG]    → Local file: {supplier_path}")
+
+        if use_volume:
+            print(f"[DEBUG] 💾 Using Railway Volume - files persist across restarts")
         else:
-            print(f"[DEBUG] ✅ Data DB (remote): {data_url}")
-            print(f"[DEBUG] ✅ Price DB (remote): {price_url}")
-            print(f"[DEBUG] ✅ Supplier DB (remote): {supplier_url}")
-            print(f"[DEBUG] No Volume needed - using remote-only mode")
+            print(f"[DEBUG] 📦 Using container /tmp - files re-sync on each restart")
 
     elif enable_dual_db and turso_url and turso_token:
         # ====================
