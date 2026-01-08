@@ -890,13 +890,96 @@ def create_app():
     app.secret_key = os.environ.get("SECRET_KEY", "vnix-secret")
 
     # =========[ Database Configuration ]=========
-    # Support both Turso (Production) and Local SQLite (Development)
-    # NEW: Support Dual Database Mode (sqlite3 old + libsql new)
+    # Support 3 separate Turso databases with embedded replicas:
+    # - data: Main database (orders, products, customers, etc.)
+    # - price: Pricing database (SKU pricing, price history)
+    # - supplier-stock: Supplier and stock database
+
+    # NEW: Check for 3 separate Turso databases
+    data_url = os.environ.get("DATA_DB_URL")
+    data_token = os.environ.get("DATA_DB_AUTH_TOKEN")
+    data_local = os.environ.get("DATA_DB_LOCAL", "data.db")
+
+    price_url = os.environ.get("PRICE_DB_URL")
+    price_token = os.environ.get("PRICE_DB_AUTH_TOKEN")
+    price_local = os.environ.get("PRICE_DB_LOCAL", "price.db")
+
+    supplier_url = os.environ.get("SUPPLIER_DB_URL")
+    supplier_token = os.environ.get("SUPPLIER_DB_AUTH_TOKEN")
+    supplier_local = os.environ.get("SUPPLIER_DB_LOCAL", "supplier_stock.db")
+
+    # OLD: Support legacy single Turso database mode (fallback)
     turso_url = os.environ.get("TURSO_DATABASE_URL")
     turso_token = os.environ.get("TURSO_AUTH_TOKEN")
     enable_dual_db = os.environ.get("ENABLE_DUAL_DB_MODE", "").lower() in ("true", "1", "yes")
 
-    if enable_dual_db and turso_url and turso_token:
+    if data_url and data_token and price_url and price_token and supplier_url and supplier_token:
+        # ====================
+        # 3 SEPARATE TURSO DATABASES
+        # ====================
+        # Support both Embedded Replica (with local files) and Remote-only (no local files)
+
+        def build_turso_uri(sync_url, auth_token, local_file):
+            """
+            Build SQLAlchemy URI for Turso database
+            - If local_file is set: Use embedded replica mode (faster reads, needs Volume)
+            - If local_file is empty: Use remote-only mode (no Volume needed)
+            """
+            # Ensure sync_url uses libsql:// protocol
+            if not sync_url.startswith("libsql://"):
+                if sync_url.startswith("https://"):
+                    sync_url = sync_url.replace("https://", "libsql://", 1)
+
+            # Check if local_file is set and not empty
+            if local_file and local_file.strip():
+                # EMBEDDED REPLICA MODE (with local file cache)
+                # Clean up file: prefix if present
+                if local_file.startswith("file:"):
+                    local_file = local_file[5:]
+                return f"sqlite+libsql:///{local_file}?sync_url={sync_url}&authToken={auth_token}"
+            else:
+                # REMOTE-ONLY MODE (no local file, direct connection to Turso)
+                # Remove libsql:// prefix for remote-only connection string
+                host = sync_url.replace("libsql://", "")
+                return f"sqlite+libsql://{host}?authToken={auth_token}"
+
+        # Detect mode based on whether local files are configured
+        use_embedded = bool(data_local and data_local.strip())
+
+        if use_embedded:
+            print("[INFO] 🚀 Using 3 separate Turso databases with EMBEDDED REPLICAS")
+            print("[INFO] 📁 Local files will be synced to Railway Volume")
+        else:
+            print("[INFO] 🚀 Using 3 separate Turso databases in REMOTE-ONLY mode")
+            print("[INFO] ☁️  No local files - all queries go directly to Turso cloud")
+
+        # Build URIs for each database
+        data_uri = build_turso_uri(data_url, data_token, data_local)
+        price_uri = build_turso_uri(price_url, price_token, price_local)
+        supplier_uri = build_turso_uri(supplier_url, supplier_token, supplier_local)
+
+        # Main database: data DB
+        app.config["SQLALCHEMY_DATABASE_URI"] = data_uri
+        app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+        # Bind keys for price and supplier databases
+        app.config["SQLALCHEMY_BINDS"] = {
+            "price": price_uri,
+            "supplier": supplier_uri
+        }
+
+        if use_embedded:
+            print(f"[DEBUG] ✅ Data DB: {data_url} → {data_local}")
+            print(f"[DEBUG] ✅ Price DB: {price_url} → {price_local}")
+            print(f"[DEBUG] ✅ Supplier DB: {supplier_url} → {supplier_local}")
+            print(f"[DEBUG] Embedded replica files will sync automatically")
+        else:
+            print(f"[DEBUG] ✅ Data DB (remote): {data_url}")
+            print(f"[DEBUG] ✅ Price DB (remote): {price_url}")
+            print(f"[DEBUG] ✅ Supplier DB (remote): {supplier_url}")
+            print(f"[DEBUG] No Volume needed - using remote-only mode")
+
+    elif enable_dual_db and turso_url and turso_token:
         # ====================
         # DUAL DATABASE MODE
         # ====================

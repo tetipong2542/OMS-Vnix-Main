@@ -1,29 +1,57 @@
-# Railway Deployment Guide for VNIX ERP with Turso
+# Railway Deployment Guide for VNIX ERP with Turso (3 Separate Databases)
+
+## ⚠️ IMPORTANT: ปัญหาที่พบบ่อย
+
+หาก Railway logs แสดง:
+```
+[INFO] Using local SQLite database files
+[DEBUG] Main DB path: /app/data.db
+```
+
+แสดงว่า **Environment Variables สำหรับ Turso ไม่ได้ถูกตั้งค่า!** ต้องแก้ทันทีตามขั้นตอนด้านล่าง
+
+---
 
 ## Prerequisites
 
 - Railway account
-- Turso database created (vnix-erp)
-- Turso auth token
+- Turso 3 databases created: `data`, `price`, `supplier-stock`
+- Turso auth tokens (แบบ `rw` - read/write)
 
-## Environment Variables
+## 🚀 Quick Fix: Environment Variables
 
-Set these in Railway dashboard (Settings → Variables):
+ไปที่ **Railway Dashboard → Settings → Variables** แล้วตั้งค่าตามนี้:
 
-### Required Variables
-r
+### ✅ Required Variables (สำคัญมาก!)
+
 ```bash
-# Turso Database Configuration
-TURSO_DATABASE_URL=libsql://vnix-erp-tetipong2542.aws-ap-northeast-1.turso.io
-TURSO_AUTH_TOKEN=your-turso-auth-token-here
+# ==== DATA DB ====
+DATA_DB_URL=libsql://data-tetipong2542.aws-ap-northeast-1.turso.io
+DATA_DB_AUTH_TOKEN=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3Njc4NDIzMDksImlkIjoiMTY3YTExNDUtZGM0NC00MzIwLTk0MmMtMDM3ZjFiNTRjZjgxIiwicmlkIjoiZWE0ZjEzN2EtYTI0ZS00N2YyLWIxOWEtMWZjNTIzYmE2Y2JjIn0.hocKljFNemkcyZ4lYeYD7FUD3hMlDIEo-Xj0kpbCsEzOwe4h1EKHh0j68IjuOWwYZQ5IutCbIekP6B2Lqn9gBQ
+DATA_DB_LOCAL=/data/data.db
 
-# Local embedded replica file (will be created automatically)
-LOCAL_DB=vnix-erp.db
+# ==== PRICE DB ====
+PRICE_DB_URL=libsql://price-tetipong2542.aws-ap-northeast-1.turso.io
+PRICE_DB_AUTH_TOKEN=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3Njc4NDIzNzUsImlkIjoiZDhlNWZiYjktOWI3YS00YzU1LWIxMWMtODNhOTBiYjNiZGUwIiwicmlkIjoiMDhhOWRlNzAtNjI4Ny00MzQ5LWE1M2MtYzYxZTI1Mjc4Y2UxIn0.hgTCaKN3iFx--UuYvmUR6T9YP5iWDkY2NNFLe5BBY382ZOWaSnv6M-cz7hP51OWTWTv1Hu2S4sJZS2RZMTg7AQ
+PRICE_DB_LOCAL=/data/price.db
 
-# Application Settings
+# ==== SUPPLIER DB ====
+SUPPLIER_DB_URL=libsql://supplier-stock-tetipong2542.aws-ap-northeast-1.turso.io
+SUPPLIER_DB_AUTH_TOKEN=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3Njc4NDIzODksImlkIjoiODBkYTFlZmItZmM1Ni00OGQ3LWEwMzctODgyMWI3NGRhZTcwIiwicmlkIjoiMzA4M2VmMDUtZDM0NS00YWY1LWJlZTQtYjQ3OGZlNjcyMTk5In0.tF_3StAUdbz0wxuGgGl6XZe1TFvFL2N2XGZ01YNB5YODkWfvMC2Iz_UiNfCKf69v_lyuRwwz1LKyTRCJA-CTBw
+SUPPLIER_DB_LOCAL=/data/supplier_stock.db
+
+# ==== Railway Volume (ถ้ามี) ====
+RAILWAY_VOLUME_MOUNT_PATH=/data
+
+# ==== Application Settings ====
 APP_NAME=VNIX ERP
 SECRET_KEY=your-production-secret-key-here
 ```
+
+### ⚠️ สำคัญมาก!
+- ใช้ `/data/data.db` **ไม่ใช่** `data.db` (ต้องมี `/data/` prefix)
+- ใช้ `/data/price.db` **ไม่ใช่** `price.db`
+- ใช้ `/data/supplier_stock.db` **ไม่ใช่** `supplier_stock.db`
 
 ### Optional Variables (for Dual Database Mode)
 
