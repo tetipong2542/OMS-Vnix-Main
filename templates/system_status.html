@@ -404,6 +404,21 @@
                     {% endif %}
                 </div>
             </div>
+            {% if status.has_turso %}
+            <div class="info-item">
+                <div class="info-label">Turso Databases</div>
+                <div class="info-value">
+                    <span class="status-badge badge-success">{{ status.turso_databases|length }} Connected</span>
+                </div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Sync Mode</div>
+                <div class="info-value">
+                    {% set first_db = status.turso_databases.values()|first %}
+                    <span class="status-badge badge-success">{{ first_db.mode }}</span>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -459,6 +474,66 @@
             </div>
         </div>
         {% endfor %}
+
+        {% if status.has_turso %}
+        <!-- Turso Cloud Databases -->
+        <h3 style="font-size: 1.2rem; font-weight: 600; margin: 32px 0 16px 0; color: var(--text-primary); padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">
+            ☁️ Turso Cloud Databases
+        </h3>
+
+        {% for db_name, db_info in status.turso_databases.items() %}
+        <div class="db-card" style="border-left: 3px solid #3498db;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3>{{ db_info.name }}</h3>
+                {% if db_info.local_exists %}
+                    <span class="status-badge badge-success">Synced</span>
+                {% else %}
+                    <span class="status-badge badge-warning">Not Synced</span>
+                {% endif %}
+            </div>
+
+            <table class="info-table" style="margin-bottom: 12px;">
+                <tr>
+                    <td>Turso URL</td>
+                    <td style="font-size: 0.85rem; word-break: break-all;">{{ db_info.url }}</td>
+                </tr>
+                <tr>
+                    <td>Mode</td>
+                    <td>{{ db_info.mode }}</td>
+                </tr>
+                <tr>
+                    <td>Local Replica Path</td>
+                    <td>{{ db_info.local_path }}</td>
+                </tr>
+                {% if db_info.local_exists %}
+                <tr>
+                    <td>Local Size</td>
+                    <td>{{ db_info.local_size }}</td>
+                </tr>
+                <tr>
+                    <td>Last Modified</td>
+                    <td>{{ db_info.local_modified }}</td>
+                </tr>
+                {% endif %}
+            </table>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                {% if db_info.local_exists %}
+                <a href="{{ url_for('download_turso_database', db_name=db_name) }}"
+                   class="db-button btn-download">
+                    Download
+                </a>
+                {% endif %}
+                <button onclick="uploadTursoDB('{{ db_name }}')"
+                        class="db-button btn-upload"
+                        id="upload-turso-btn-{{ db_name }}">
+                    Upload & Sync to Turso
+                </button>
+                <input type="file" id="file-turso-{{ db_name }}" accept=".db" style="display: none;" onchange="handleTursoUpload('{{ db_name }}')">
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
 
         <div style="margin-top: 20px; padding: 16px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px;">
             <a href="{{ url_for('download_all_databases') }}"
@@ -682,6 +757,71 @@
             }
         } catch (error) {
             alert(`Error: ${error.message}`);
+        }
+    }
+
+    // Upload Turso Database
+    function uploadTursoDB(dbName) {
+        const fileInput = document.getElementById(`file-turso-${dbName}`);
+        fileInput.click();
+    }
+
+    async function handleTursoUpload(dbName) {
+        const fileInput = document.getElementById(`file-turso-${dbName}`);
+        const file = fileInput.files[0];
+
+        if (!file) {
+            return;
+        }
+
+        if (!file.name.endsWith('.db')) {
+            alert('Please select a .db file only');
+            fileInput.value = '';
+            return;
+        }
+
+        if (!confirm(`Upload and sync ${dbName} database to Turso Cloud?\n\nThis will:\n1. Replace local replica file\n2. Create automatic backup\n3. Sync to Turso cloud\n\nContinue?`)) {
+            fileInput.value = '';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('database', file);
+
+        const uploadBtn = document.getElementById(`upload-turso-btn-${dbName}`);
+        const originalText = uploadBtn.textContent;
+        uploadBtn.textContent = 'Uploading...';
+        uploadBtn.disabled = true;
+
+        try {
+            const response = await fetch(`/api/turso/upload/${dbName}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                let message = `Success: ${result.message}\n\nFile Size: ${result.size}`;
+                if (result.backup) {
+                    message += `\nBackup: ${result.backup}`;
+                }
+                if (result.synced_to_turso) {
+                    message += '\n\n✓ Synced to Turso Cloud successfully!';
+                } else if (result.sync_error) {
+                    message += `\n\n⚠ Warning: Failed to sync to Turso Cloud\nError: ${result.sync_error}`;
+                }
+                alert(message);
+                location.reload();
+            } else {
+                alert(`Upload Failed:\n\n${result.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        } finally {
+            uploadBtn.textContent = originalText;
+            uploadBtn.disabled = false;
+            fileInput.value = '';
         }
     }
 

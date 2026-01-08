@@ -1696,6 +1696,52 @@ def create_app():
             pass
         return info
 
+    def get_turso_databases():
+        """Auto-detect Turso databases from environment variables"""
+        turso_dbs = {}
+
+        # Scan all environment variables for Turso database patterns
+        for key in os.environ.keys():
+            if key.endswith('_DB_URL'):
+                # Extract database name (e.g., DATA_DB_URL -> data)
+                db_name = key.replace('_DB_URL', '').lower()
+
+                url = os.environ.get(key)
+                token = os.environ.get(f"{db_name.upper()}_DB_AUTH_TOKEN")
+                local_path = os.environ.get(f"{db_name.upper()}_DB_LOCAL")
+
+                if url and token:  # Must have both URL and token
+                    # Determine actual local file path
+                    actual_local_path = None
+                    if local_path:
+                        actual_local_path = local_path
+                    else:
+                        # Fallback to /tmp/
+                        db_base_name = url.split('//')[-1].split('.')[0]  # Extract from URL
+                        actual_local_path = f"/tmp/{db_base_name}.db"
+
+                    # Get local file info if it exists
+                    local_info = get_db_info(actual_local_path) if actual_local_path else {}
+
+                    # Determine mode
+                    if local_path:
+                        mode = "Embedded Replica (with Volume)" if os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") else "Embedded Replica (in /tmp)"
+                    else:
+                        mode = "Remote-only" if not actual_local_path else "Embedded Replica (in /tmp)"
+
+                    turso_dbs[db_name] = {
+                        "name": f"{db_name.capitalize()} Database",
+                        "url": url,
+                        "has_token": True,
+                        "local_path": actual_local_path,
+                        "mode": mode,
+                        "local_exists": local_info.get("exists", False),
+                        "local_size": local_info.get("size", "N/A"),
+                        "local_modified": local_info.get("modified")
+                    }
+
+        return turso_dbs
+
     @app.route("/api/userpref/set", methods=["POST"])
     @login_required
     def api_userpref_set():
@@ -11045,8 +11091,13 @@ def create_app():
             "APP_NAME": os.environ.get("APP_NAME", "VNIX ERP"),
         }
 
+        # 6. Turso Databases (Auto-detect from env vars)
+        turso_databases = get_turso_databases()
+
         status_info = {
             "databases": databases,
+            "turso_databases": turso_databases,
+            "has_turso": len(turso_databases) > 0,
             "db_location": db_location,
             "volume_path": volume_path or "Not Configured",
             "total_orders": total_orders,
@@ -11226,6 +11277,132 @@ def create_app():
 
         except Exception as e:
             app.logger.exception(f"Database upload failed for {db_type}")
+            return jsonify({'error': str(e)}), 500
+
+    # =========[ Turso Database Routes ]=========
+    @app.route("/api/turso/download/<db_name>")
+    @login_required
+    def download_turso_database(db_name):
+        """Download Turso database local replica file"""
+        user = current_user()
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'ไม่มีสิทธิ์ดาวน์โหลดฐานข้อมูล (Admin only)'}), 403
+
+        turso_dbs = get_turso_databases()
+
+        if db_name not in turso_dbs:
+            return jsonify({'error': 'ไม่พบฐานข้อมูล Turso นี้'}), 404
+
+        db_info = turso_dbs[db_name]
+        local_path = db_info.get('local_path')
+
+        if not local_path or not os.path.exists(local_path):
+            return jsonify({'error': f'ไม่พบไฟล์ local replica สำหรับ {db_name}'}), 404
+
+        filename = os.path.basename(local_path)
+        return send_file(local_path, as_attachment=True, download_name=filename)
+
+    @app.route("/api/turso/upload/<db_name>", methods=['POST'])
+    @login_required
+    def upload_turso_database(db_name):
+        """Upload and replace Turso database (upload to local replica, then sync to Turso)"""
+        user = current_user()
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'ไม่มีสิทธิ์อัปโหลดฐานข้อมูล (Admin only)'}), 403
+
+        turso_dbs = get_turso_databases()
+
+        if db_name not in turso_dbs:
+            return jsonify({'error': 'ไม่พบฐานข้อมูล Turso นี้'}), 404
+
+        # Check if file is in request
+        if 'database' not in request.files:
+            return jsonify({'error': 'ไม่พบไฟล์ที่อัปโหลด'}), 400
+
+        file = request.files['database']
+
+        # Check filename
+        if file.filename == '':
+            return jsonify({'error': 'ไม่ได้เลือกไฟล์'}), 400
+
+        # Check file extension
+        if not file.filename.endswith('.db'):
+            return jsonify({'error': 'กรุณาอัปโหลดไฟล์ .db เท่านั้น'}), 400
+
+        try:
+            db_info = turso_dbs[db_name]
+            local_path = db_info.get('local_path')
+
+            if not local_path:
+                return jsonify({'error': 'ไม่มี local replica path สำหรับฐานข้อมูลนี้'}), 400
+
+            db_dir = os.path.dirname(local_path)
+
+            # Ensure directory exists
+            os.makedirs(db_dir, exist_ok=True)
+
+            # Create backup before replacing
+            backup_filename = None
+            if os.path.exists(local_path):
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                backup_filename = f'{db_name}_turso_backup_{timestamp}.db'
+                backup_path = os.path.join(db_dir, backup_filename)
+
+                import shutil
+                shutil.copy2(local_path, backup_path)
+                app.logger.info(f"Turso backup created: {backup_filename}")
+
+            # Save uploaded file to local replica
+            file.save(local_path)
+
+            # Get file size
+            size_mb = os.path.getsize(local_path) / (1024 * 1024)
+
+            # Sync to Turso cloud
+            try:
+                import libsql_experimental as libsql
+
+                url = db_info.get('url')
+                token_key = f"{db_name.upper()}_DB_AUTH_TOKEN"
+                token = os.environ.get(token_key)
+
+                if url and token:
+                    # Open connection and sync
+                    conn = libsql.connect(local_path, sync_url=url, auth_token=token)
+                    conn.sync()  # Push local changes to Turso
+                    conn.close()
+
+                    app.logger.info(f"Turso database {db_name} uploaded and synced by {user.username}: {size_mb:.2f} MB")
+
+                    return jsonify({
+                        'success': True,
+                        'message': f'อัปโหลดและ sync ไปยัง Turso สำเร็จ',
+                        'size': f'{size_mb:.2f} MB',
+                        'backup': backup_filename,
+                        'synced_to_turso': True
+                    })
+                else:
+                    return jsonify({
+                        'success': True,
+                        'message': f'อัปโหลดสำเร็จ แต่ไม่สามารถ sync ไปยัง Turso ได้ (ไม่พบ URL/Token)',
+                        'size': f'{size_mb:.2f} MB',
+                        'backup': backup_filename,
+                        'synced_to_turso': False
+                    })
+
+            except Exception as sync_error:
+                app.logger.error(f"Turso sync failed: {sync_error}")
+                return jsonify({
+                    'success': True,
+                    'message': f'อัปโหลดสำเร็จ แต่การ sync ไปยัง Turso ล้มเหลว: {str(sync_error)}',
+                    'size': f'{size_mb:.2f} MB',
+                    'backup': backup_filename,
+                    'synced_to_turso': False,
+                    'sync_error': str(sync_error)
+                }), 206  # 206 Partial Content
+
+        except Exception as e:
+            app.logger.exception(f"Turso database upload failed for {db_name}")
             return jsonify({'error': str(e)}), 500
 
     # =========[ /NEW ]=========
